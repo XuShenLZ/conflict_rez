@@ -267,6 +267,11 @@ class parallel_env(ParallelEnv):
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
 
+        # Also seeding the action spaces for reproducable results
+        if seed is not None:
+            for i, agent in enumerate(self.possible_agents):
+                self.action_space(agent).seed(seed + i)
+
     def move(self, agent: str, action: int):
         # Delta moving distance and heading angle
         d, a = self._action_to_inputs[action]
