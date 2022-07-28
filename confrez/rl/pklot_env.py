@@ -5,7 +5,7 @@ from typing import Dict, Set, Tuple
 from gym.spaces import Box, Discrete
 import numpy as np
 import pygame
-from gym.utils import seeding
+from gym.utils import EzPickle, seeding
 
 from pettingzoo import ParallelEnv
 from pettingzoo.utils import wrappers, parallel_to_aec
@@ -48,7 +48,7 @@ def raw_env(**kwargs):
     return env
 
 
-class parallel_env(ParallelEnv):
+class parallel_env(ParallelEnv, EzPickle):
     metadata = {
         "render_modes": ["human", "rgb_array"],
         "name": "pklot",
@@ -57,8 +57,8 @@ class parallel_env(ParallelEnv):
         # "has_manual_policy": True,
     }
 
-    def __init__(self, n_vehicles=4, max_cycles=200):
-        super().__init__()
+    def __init__(self, n_vehicles=4, max_cycles=100):
+        EzPickle.__init__(self, n_vehicles, max_cycles)
         self.n_vehicles = n_vehicles
 
         self.dt = 1.0 / self.metadata["render_fps"]
@@ -139,6 +139,7 @@ class parallel_env(ParallelEnv):
 
         self.max_cycles = max_cycles
         self.frame = 0
+        self.cycle_done = False
 
         self.closed = False
         self.seed()
@@ -329,7 +330,7 @@ class parallel_env(ParallelEnv):
         self.occupancy[new_front].add(agent)
         self.occupancy[new_back].add(agent)
 
-    def remove_agent(self, agent: str):
+    def unregister_agent(self, agent: str):
         """
         remove an agent from occupancy dict
         """
@@ -499,6 +500,7 @@ class parallel_env(ParallelEnv):
         self.goals = {agent: {"front": None, "back": None} for agent in self.agents}
 
         self.frame = 0
+        self.cycle_done = False
 
         # Occupancy
         self.occupancy = {
@@ -521,14 +523,15 @@ class parallel_env(ParallelEnv):
             self.agents = []
             return {}, {}, {}, {}
 
-        done = self.frame >= self.max_cycles
-
+        # Init return values
         observations = {agent: None for agent in self.agents}
         rewards = {agent: 0 for agent in self.agents}
-        dones = {agent: done for agent in self.agents}
+        dones = {
+            agent: False for agent in self.agents
+        }  # All agents that are in self.agents should be active, thus not done
         infos = {agent: {} for agent in self.agents}
 
-        if not done:
+        if not self.cycle_done:
             # Move agents with actions
             for agent in self.agents:
                 self.move(agent=agent, action=actions[agent])
@@ -549,9 +552,19 @@ class parallel_env(ParallelEnv):
 
             self.frame += 1
 
+        # Check whether the env reaches its max cycles
+        self.cycle_done = self.frame >= self.max_cycles
+
+        # If it reaches, mark all active agents as done
+        if self.cycle_done:
+            dones = {agent: True for agent in self.agents}
+
+        # For agents that are done, un-register them from the occupancy dict
         for agent in self.agents:
             if dones[agent]:
-                self.remove_agent(agent)
+                self.unregister_agent(agent)
+
+        # Remove the done agents from the active agent list. This will only affect next iteration
         self.agents = [agent for agent in self.agents if not dones[agent]]
 
         return observations, rewards, dones, infos
