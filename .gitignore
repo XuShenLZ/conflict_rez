@@ -1,3 +1,9 @@
+# Model
+*.zip
+
+# Tensorboard
+events.out.tfevents*
+
 # IDE
 .vscode/
 

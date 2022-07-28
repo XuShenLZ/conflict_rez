@@ -162,6 +162,7 @@ class parallel_env(ParallelEnv, EzPickle):
         self._ego_back_color = (92, 176, 62)
         self._goal_front_color = (255, 255, 0)
         self._goal_back_color = (179, 179, 0)
+        self._collision_color = (255, 255, 255)
 
         self.init_vehicle_walls()
 
@@ -396,6 +397,13 @@ class parallel_env(ParallelEnv, EzPickle):
             )
             pygame.draw.rect(surface=surf, color=self._other_back_color, rect=back_rect)
 
+        # If collision, use the collision color to cover the grid
+        if len(self.occupancy[front]) > 1:
+            pygame.draw.rect(surface=surf, color=self._collision_color, rect=front_rect)
+
+        if len(self.occupancy[back]) > 1:
+            pygame.draw.rect(surface=surf, color=self._collision_color, rect=back_rect)
+
     def draw_goal(self, agent: str, surf: pygame.Surface = None):
         """
         draw the goal of the specified agent, if the goal location is not currently occupied
@@ -532,11 +540,13 @@ class parallel_env(ParallelEnv, EzPickle):
         infos = {agent: {} for agent in self.agents}
 
         if not self.cycle_done:
-            # Move agents with actions
+            # Move agents with actions simultaneously
             for agent in self.agents:
                 self.move(agent=agent, action=actions[agent])
                 self.states_history[agent].append(self.states[agent])
 
+            # Check collision or goal completion
+            for agent in self.agents:
                 if self.has_collision(agent):
                     dones[agent] = True
                     rewards[agent] = -1e5
@@ -546,9 +556,9 @@ class parallel_env(ParallelEnv, EzPickle):
                 else:
                     rewards[agent] = -10
 
-            observations = {agent: self.observe(agent) for agent in self.agents}
-
             self.draw()
+
+            observations = {agent: self.observe(agent) for agent in self.agents}
 
             self.frame += 1
 
