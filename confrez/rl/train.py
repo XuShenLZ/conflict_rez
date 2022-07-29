@@ -31,7 +31,7 @@ model = DQN(
     "CnnPolicy",
     env,
     verbose=3,
-    buffer_size=100000,
+    buffer_size=50000,
     learning_starts=500,
     tensorboard_log=f"{cwd}/DQN-CNN_tensorboard/",
 )

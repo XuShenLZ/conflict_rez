@@ -6,7 +6,7 @@ env = parallel_env()
 monitor = ProcessMonitor(env)
 
 # model = PPO.load("PPO-CNN_07-28-2022_12-35-52")
-model = DQN.load("DQN-CNN_07-28-2022_16-40-09")
+model = DQN.load("DQN-CNN_07-28-2022_23-51-39")
 
 observations = env.reset(seed=0)
 env.render()

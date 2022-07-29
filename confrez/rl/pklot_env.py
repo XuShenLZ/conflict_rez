@@ -548,13 +548,13 @@ class parallel_env(ParallelEnv, EzPickle):
             # Check collision or goal completion
             for agent in self.agents:
                 if self.has_collision(agent):
-                    dones[agent] = True
-                    rewards[agent] = -1e5
+                    # dones[agent] = True
+                    rewards[agent] = -1e3
                 elif self.reach_goal(agent):
                     dones[agent] = True
-                    rewards[agent] = 1e3
+                    rewards[agent] = 1e2
                 else:
-                    rewards[agent] = -10
+                    rewards[agent] = -1
 
             self.draw()
 
