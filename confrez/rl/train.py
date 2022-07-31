@@ -12,6 +12,8 @@ cwd = os_path.dirname(__file__)
 
 env = parallel_env()
 env = ss.black_death_v3(env)
+# env = ss.color_reduction_v0(env, mode="B")
+# env = ss.frame_stack_v2(env, 3)
 env = ss.pettingzoo_env_to_vec_env_v1(env)
 env = ss.concat_vec_envs_v1(env, 16, num_cpus=8, base_class="stable_baselines3")
 
@@ -38,3 +40,4 @@ model = DQN(
 
 model.learn(total_timesteps=2000000, tb_log_name=f"DQN-CNN_{timestamp}")
 model.save(f"DQN-CNN_{timestamp}")
+print("Training Finished")

@@ -137,6 +137,9 @@ class parallel_env(ParallelEnv, EzPickle):
             6: [-1, np.pi / 4],
         }
 
+        # Function to return the index of the reverse action. e.g. the reverse of action #1 [1, -np.pi / 4] is action #6 [-1, np.pi / 4], the reverse of action #0 is still 0
+        self.reverse_action = lambda x: (7 - x) % 7
+
         self.max_cycles = max_cycles
         self.frame = 0
         self.cycle_done = False
@@ -298,31 +301,30 @@ class parallel_env(ParallelEnv, EzPickle):
             new_back = current_front
 
             new_angle = current_angle + a
-            dx = d * np.rint(np.cos(new_angle))
-            dy = d * np.rint(np.sin(new_angle))
+            dx = int(d * np.rint(np.cos(new_angle)))
+            dy = int(d * np.rint(np.sin(new_angle)))
             new_front = (current_front[0] + dx, current_front[1] + dy)
         else:
             # The car moves backward
             new_front = current_back
 
             new_angle = current_angle + a
-            dx = d * np.rint(np.cos(new_angle))
-            dy = d * np.rint(np.sin(new_angle))
+            dx = int(d * np.rint(np.cos(new_angle)))
+            dy = int(d * np.rint(np.sin(new_angle)))
             new_back = (current_back[0] + dx, current_back[1] + dy)
 
-        # Check the bounds
-        if (
-            all(0 <= np.array(new_front))
-            and all(np.array(new_front) < self.n_total_grids)
-            and all(0 <= np.array(new_back))
-            and all(np.array(new_back) < self.n_total_grids)
+        hit_wall = False
+        # Check the walls
+        if ("wall" in self.occupancy[new_front]) or (
+            "wall" in self.occupancy[new_back]
         ):
-            # If the new front and back all inside the bound, the new states are fine
-            pass
-        else:
-            # Otherwise revert to old values
+            # If the new front or back hits the wall, revert to old values
             new_front = current_front
             new_back = current_back
+            hit_wall = True
+        else:
+            # Otherwise the new states are fine, `hit_wall` is still False
+            pass
 
         self.states[agent]["front"] = new_front
         self.states[agent]["back"] = new_back
@@ -330,6 +332,8 @@ class parallel_env(ParallelEnv, EzPickle):
         # Register the current states of the agent into occupancy dict
         self.occupancy[new_front].add(agent)
         self.occupancy[new_back].add(agent)
+
+        return hit_wall
 
     def unregister_agent(self, agent: str):
         """
@@ -344,7 +348,7 @@ class parallel_env(ParallelEnv, EzPickle):
 
     def has_collision(self, agent: str) -> bool:
         """
-        check whether this agent collide with the wall or other agents
+        check whether this agent collide with other agents. Note: the case of hitting the wall is already considered in `self.move` function
         """
         front = self.states[agent]["front"]
         back = self.states[agent]["back"]
@@ -365,6 +369,20 @@ class parallel_env(ParallelEnv, EzPickle):
             return True
         else:
             return False
+
+    def dist2goal(self, agent: str) -> float:
+        """
+        calculate the distance to goal
+        """
+        front = self.states[agent]["front"]
+        back = self.states[agent]["back"]
+        center = (np.array(front) + np.array(back)) / 2
+
+        goal_front = self.goals[agent]["front"]
+        goal_back = self.goals[agent]["back"]
+        goal_center = (np.array(goal_front) + np.array(goal_back)) / 2
+
+        return np.linalg.norm(center - goal_center)
 
     def draw_car(self, agent: str, ego: bool = False, surf: pygame.Surface = None):
         """
@@ -542,19 +560,35 @@ class parallel_env(ParallelEnv, EzPickle):
         if not self.cycle_done:
             # Move agents with actions simultaneously
             for agent in self.agents:
-                self.move(agent=agent, action=actions[agent])
+                hit_wall = self.move(agent=agent, action=actions[agent])
+                if hit_wall:
+                    rewards[agent] += -1e3
                 self.states_history[agent].append(self.states[agent])
 
+            agents_with_collision = []
             # Check collision or goal completion
             for agent in self.agents:
                 if self.has_collision(agent):
-                    # dones[agent] = True
-                    rewards[agent] = -1e3
+                    # If collide with other agents, mark the agent name and apply huge penalty
+                    agents_with_collision.append(agent)
+                    rewards[agent] += -1e3
                 elif self.reach_goal(agent):
+                    # If reach the goal, the agent will be done and get huge reward
                     dones[agent] = True
-                    rewards[agent] = 1e2
+                    rewards[agent] += 1e4
+                elif actions[agent] == 0:
+                    # If the vehicle remain stationary, it will get a small penalty
+                    rewards[agent] += -10
                 else:
-                    rewards[agent] = -1
+                    # The time cost for vehicle
+                    rewards[agent] += -1
+
+            for agent in agents_with_collision:
+                self.move(agent, self.reverse_action(actions[agent]))
+
+            for agent in self.agents:
+                # The further the vehicle is away from the goal, the larger the penalty
+                rewards[agent] += -self.dist2goal(agent)
 
             self.draw()
 
