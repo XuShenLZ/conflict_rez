@@ -163,9 +163,8 @@ class parallel_env(ParallelEnv, EzPickle):
         self._other_back_color = (191, 115, 77)
         self._ego_front_color = (64, 255, 0)
         self._ego_back_color = (92, 176, 62)
-        self._goal_front_color = (255, 255, 0)
-        self._goal_back_color = (179, 179, 0)
-        self._collision_color = (255, 255, 255)
+        self._goal_front_color = (255, 255, 255)
+        self._goal_back_color = (179, 179, 179)
 
         self.init_vehicle_walls()
 
@@ -414,13 +413,6 @@ class parallel_env(ParallelEnv, EzPickle):
                 surface=surf, color=self._other_front_color, rect=front_rect
             )
             pygame.draw.rect(surface=surf, color=self._other_back_color, rect=back_rect)
-
-        # If collision, use the collision color to cover the grid
-        if len(self.occupancy[front]) > 1:
-            pygame.draw.rect(surface=surf, color=self._collision_color, rect=front_rect)
-
-        if len(self.occupancy[back]) > 1:
-            pygame.draw.rect(surface=surf, color=self._collision_color, rect=back_rect)
 
     def draw_goal(self, agent: str, surf: pygame.Surface = None):
         """
