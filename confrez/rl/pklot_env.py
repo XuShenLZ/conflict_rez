@@ -185,25 +185,29 @@ class parallel_env(ParallelEnv, EzPickle):
             xy: set() for xy in product(range(self.n_total_grids), repeat=2)
         }
 
-        self.states["vehicle_0"] = {"front": (6, 8), "back": (6, 7)}
-        self.occupancy[(6, 8)].add("vehicle_0")
-        self.occupancy[(6, 7)].add("vehicle_0")
-        self.goals["vehicle_0"] = {"front": (12, 6), "back": (11, 6)}
+        if "vehicle_0" in self.possible_agents:
+            self.states["vehicle_0"] = {"front": (6, 8), "back": (6, 7)}
+            self.occupancy[(6, 8)].add("vehicle_0")
+            self.occupancy[(6, 7)].add("vehicle_0")
+            self.goals["vehicle_0"] = {"front": (12, 6), "back": (11, 6)}
 
-        self.states["vehicle_1"] = {"front": (8, 7), "back": (9, 7)}
-        self.occupancy[(8, 7)].add("vehicle_1")
-        self.occupancy[(9, 7)].add("vehicle_1")
-        self.goals["vehicle_1"] = {"front": (6, 3), "back": (6, 4)}
+        if "vehicle_1" in self.possible_agents:
+            self.states["vehicle_1"] = {"front": (8, 7), "back": (9, 7)}
+            self.occupancy[(8, 7)].add("vehicle_1")
+            self.occupancy[(9, 7)].add("vehicle_1")
+            self.goals["vehicle_1"] = {"front": (6, 3), "back": (6, 4)}
 
-        self.states["vehicle_2"] = {"front": (6, 5), "back": (6, 4)}
-        self.occupancy[(6, 5)].add("vehicle_2")
-        self.occupancy[(6, 4)].add("vehicle_2")
-        self.goals["vehicle_2"] = {"front": (1, 7), "back": (2, 7)}
+        if "vehicle_2" in self.possible_agents:
+            self.states["vehicle_2"] = {"front": (6, 5), "back": (6, 4)}
+            self.occupancy[(6, 5)].add("vehicle_2")
+            self.occupancy[(6, 4)].add("vehicle_2")
+            self.goals["vehicle_2"] = {"front": (1, 7), "back": (2, 7)}
 
-        self.states["vehicle_3"] = {"front": (5, 6), "back": (4, 6)}
-        self.occupancy[(5, 6)].add("vehicle_3")
-        self.occupancy[(4, 6)].add("vehicle_3")
-        self.goals["vehicle_3"] = {"front": (6, 10), "back": (6, 9)}
+        if "vehicle_3" in self.possible_agents:
+            self.states["vehicle_3"] = {"front": (5, 6), "back": (4, 6)}
+            self.occupancy[(5, 6)].add("vehicle_3")
+            self.occupancy[(4, 6)].add("vehicle_3")
+            self.goals["vehicle_3"] = {"front": (6, 10), "back": (6, 9)}
 
         # ============ Walls
         # ==== Top
