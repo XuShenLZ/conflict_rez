@@ -2,6 +2,8 @@ from confrez.rl import pklot_env
 from confrez.rl.pklot_env import parallel_env
 from confrez.rl.pklot_env import env as aec_env
 
+from confrez.rl.utils import ProcessMonitor
+
 from pettingzoo.test import (
     parallel_api_test,
     max_cycles_test,
@@ -27,16 +29,19 @@ print("passed render test")
 
 # test_save_obs(aec_env())
 
-# env = parallel_env()
+env = parallel_env(n_vehicles=2)
 
-# observations = env.reset(seed=0)
-# env.render()
+monitor = ProcessMonitor(env)
 
-# max_cycles = 500
+observations = env.reset(seed=0)
+env.render()
 
-# for step in range(max_cycles):
-#     actions = {agent: env.action_space(agent).sample() for agent in env.agents}
-#     print(actions)
-#     observations, rewards, dones, infos = env.step(actions)
-#     env.render()
-#     print(f"step: {step}")
+max_cycles = 500
+
+for step in range(max_cycles):
+    actions = {agent: env.action_space(agent).sample() for agent in env.agents}
+    print(actions)
+    monitor.show(observations=observations, actions=actions, notes="Before step")
+    observations, rewards, dones, infos = env.step(actions)
+    env.render()
+    print(f"step: {step}")

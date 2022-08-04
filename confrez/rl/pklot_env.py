@@ -159,10 +159,10 @@ class parallel_env(ParallelEnv, EzPickle):
         self._upper_wall_idxs = [3, 4, 5, 7, 8, 10]
         self._lower_wall_idxs = [3, 4, 5, 7, 9, 10]
 
-        self._other_front_color = (255, 85, 0)
-        self._other_back_color = (191, 115, 77)
-        self._ego_front_color = (64, 255, 0)
-        self._ego_back_color = (92, 176, 62)
+        self._other_front_color = (255, 0, 0)
+        self._other_back_color = (130, 0, 0)
+        self._ego_front_color = (0, 255, 0)
+        self._ego_back_color = (0, 130, 0)
         self._goal_front_color = (255, 255, 255)
         self._goal_back_color = (179, 179, 179)
 
@@ -196,6 +196,11 @@ class parallel_env(ParallelEnv, EzPickle):
             self.occupancy[(8, 7)].add("vehicle_1")
             self.occupancy[(9, 7)].add("vehicle_1")
             self.goals["vehicle_1"] = {"front": (6, 3), "back": (6, 4)}
+
+            # self.states["vehicle_1"] = {"front": (6, 5), "back": (6, 4)}
+            # self.occupancy[(6, 5)].add("vehicle_1")
+            # self.occupancy[(6, 4)].add("vehicle_1")
+            # self.goals["vehicle_1"] = {"front": (1, 7), "back": (2, 7)}
 
         if "vehicle_2" in self.possible_agents:
             self.states["vehicle_2"] = {"front": (6, 5), "back": (6, 4)}
@@ -399,6 +404,13 @@ class parallel_env(ParallelEnv, EzPickle):
         front = self.states[agent]["front"]
         back = self.states[agent]["back"]
 
+        if ego:
+            front_color = self._ego_front_color
+            back_color = self._ego_back_color
+        else:
+            front_color = self._other_front_color
+            back_color = self._other_back_color
+
         front_rect = pygame.Rect(
             self.g2i(*front),
             (self.grid_size, self.grid_size),
@@ -409,16 +421,10 @@ class parallel_env(ParallelEnv, EzPickle):
             (self.grid_size, self.grid_size),
         )
 
-        if ego:
-            pygame.draw.rect(surface=surf, color=self._ego_front_color, rect=front_rect)
-            pygame.draw.rect(surface=surf, color=self._ego_back_color, rect=back_rect)
-        else:
-            pygame.draw.rect(
-                surface=surf, color=self._other_front_color, rect=front_rect
-            )
-            pygame.draw.rect(surface=surf, color=self._other_back_color, rect=back_rect)
+        pygame.draw.rect(surface=surf, color=front_color, rect=front_rect)
+        pygame.draw.rect(surface=surf, color=back_color, rect=back_rect)
 
-    def draw_goal(self, agent: str, surf: pygame.Surface = None):
+    def draw_goal(self, agent: str, ego: bool = False, surf: pygame.Surface = None):
         """
         draw the goal of the specified agent, if the goal location is not currently occupied
         `surf`: the pygame surface to plot on
@@ -429,13 +435,26 @@ class parallel_env(ParallelEnv, EzPickle):
         front = self.goals[agent]["front"]
         back = self.goals[agent]["back"]
 
+        if ego:
+            front_color = self._ego_front_color
+            back_color = self._ego_back_color
+        else:
+            front_color = self._other_front_color
+            back_color = self._other_back_color
+
         if len(self.occupancy[front]) == 0:
             front_rect = pygame.Rect(
                 self.g2i(*front),
                 (self.grid_size, self.grid_size),
             )
-            pygame.draw.rect(
-                surface=surf, color=self._goal_front_color, rect=front_rect
+            pygame.draw.circle(
+                surface=surf,
+                color=front_color,
+                center=(
+                    front_rect.left + self.grid_size / 2,
+                    front_rect.top + self.grid_size / 2,
+                ),
+                radius=self.grid_size / 2,
             )
 
         if len(self.occupancy[back]) == 0:
@@ -443,7 +462,15 @@ class parallel_env(ParallelEnv, EzPickle):
                 self.g2i(*back),
                 (self.grid_size, self.grid_size),
             )
-            pygame.draw.rect(surface=surf, color=self._goal_back_color, rect=back_rect)
+            pygame.draw.circle(
+                surface=surf,
+                color=back_color,
+                center=(
+                    back_rect.left + self.grid_size / 2,
+                    back_rect.top + self.grid_size / 2,
+                ),
+                radius=self.grid_size / 2,
+            )
 
     def draw(self):
         """
@@ -466,8 +493,8 @@ class parallel_env(ParallelEnv, EzPickle):
         surf = self.screen.copy()
 
         # Re-plot the car itself with ego color again
+        self.draw_goal(agent=agent, ego=True, surf=surf)
         self.draw_car(agent=agent, ego=True, surf=surf)
-        self.draw_goal(agent=agent, surf=surf)
 
         # Return an image
         observation = pygame.surfarray.pixels3d(surf)
