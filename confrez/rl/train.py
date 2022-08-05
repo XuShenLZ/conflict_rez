@@ -9,10 +9,11 @@ from os import path as os_path
 
 cwd = os_path.dirname(__file__)
 
-MODEL_NAME = "DQN-CNN-3v"
+MODEL_NAME = "DQN-CNN-2v-1-3-new-color"
 
 env = parallel_env(n_vehicles=2)
 env = ss.black_death_v3(env)
+env = ss.resize_v1(env, 140, 140)
 # env = ss.color_reduction_v0(env, mode="B")
 # env = ss.frame_stack_v2(env, 3)
 env = ss.pettingzoo_env_to_vec_env_v1(env)
@@ -47,27 +48,21 @@ def step_schedule(
     return func
 
 
-# model = PPO(
-#     "CnnPolicy",
-#     env,
-#     verbose=3,
-#     n_steps=128,
-#     n_epochs=5,
-#     tensorboard_log=f"{cwd}/PPO-CNN_tensorboard/",
-# )
-
 model = DQN(
     "CnnPolicy",
     env,
-    learning_rate=step_schedule(0.005, [1, 0.8, 0.3], [1, 0.1, 0.05]),
+    learning_rate=step_schedule(0.0005, [1, 0.8, 0.3], [1, 0.5, 0.1]),
     verbose=3,
-    buffer_size=50000,
+    buffer_size=70000,
     learning_starts=500,
     exploration_fraction=0.3,
     exploration_final_eps=0.4,
     tensorboard_log=f"{cwd}/DQN-CNN_tensorboard/",
 )
 
-model.learn(total_timesteps=5000000, tb_log_name=f"{MODEL_NAME}_{timestamp}")
+model.learn(
+    total_timesteps=6000000,
+    tb_log_name=f"{MODEL_NAME}_{timestamp}",
+)
 model.save(f"{MODEL_NAME}_{timestamp}")
 print("Training Finished")

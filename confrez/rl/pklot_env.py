@@ -166,6 +166,13 @@ class parallel_env(ParallelEnv, EzPickle):
         self._goal_front_color = (255, 255, 255)
         self._goal_back_color = (179, 179, 179)
 
+        self._colors = [
+            {"front": (255, 119, 0), "back": (128, 60, 0)},
+            {"front": (0, 255, 212), "back": (0, 140, 117)},
+            {"front": (255, 0, 149), "back": (128, 0, 74)},
+            {"front": (200, 255, 0), "back": (100, 128, 0)},
+        ]
+
         self.init_vehicle_walls()
 
     def g2i(self, x: int, y: int) -> Tuple[int, int]:
@@ -192,15 +199,23 @@ class parallel_env(ParallelEnv, EzPickle):
             self.goals["vehicle_0"] = {"front": (12, 6), "back": (11, 6)}
 
         if "vehicle_1" in self.possible_agents:
+            # ========== Enable this part to make vehicle_1 use its own states
             # self.states["vehicle_1"] = {"front": (8, 7), "back": (9, 7)}
             # self.occupancy[(8, 7)].add("vehicle_1")
             # self.occupancy[(9, 7)].add("vehicle_1")
             # self.goals["vehicle_1"] = {"front": (6, 3), "back": (6, 4)}
 
+            # ========== Enable this part to make vehicle_1 use vehicle_2 states
             self.states["vehicle_1"] = {"front": (6, 5), "back": (6, 4)}
             self.occupancy[(6, 5)].add("vehicle_1")
             self.occupancy[(6, 4)].add("vehicle_1")
             self.goals["vehicle_1"] = {"front": (1, 7), "back": (2, 7)}
+
+            # ========= Enable this part to make vehicle_1 use vehicle_3 states
+            # self.states["vehicle_1"] = {"front": (5, 6), "back": (4, 6)}
+            # self.occupancy[(5, 6)].add("vehicle_1")
+            # self.occupancy[(4, 6)].add("vehicle_1")
+            # self.goals["vehicle_1"] = {"front": (6, 10), "back": (6, 9)}
 
         if "vehicle_2" in self.possible_agents:
             self.states["vehicle_2"] = {"front": (6, 5), "back": (6, 4)}
@@ -392,10 +407,15 @@ class parallel_env(ParallelEnv, EzPickle):
 
         return np.linalg.norm(center - goal_center)
 
-    def draw_car(self, agent: str, ego: bool = False, surf: pygame.Surface = None):
+    def draw_car(
+        self,
+        agent: str,
+        color: Dict[str, Tuple[int, int, int]],
+        surf: pygame.Surface = None,
+    ):
         """
         draw the specified agent at current time step
-        `ego`: if set to be `True`, use the ego color to draw it.
+        `color`: the color dictionary to draw the vehicle
         """
 
         if surf is None:
@@ -403,13 +423,6 @@ class parallel_env(ParallelEnv, EzPickle):
 
         front = self.states[agent]["front"]
         back = self.states[agent]["back"]
-
-        if ego:
-            front_color = self._ego_front_color
-            back_color = self._ego_back_color
-        else:
-            front_color = self._other_front_color
-            back_color = self._other_back_color
 
         front_rect = pygame.Rect(
             self.g2i(*front),
@@ -421,10 +434,15 @@ class parallel_env(ParallelEnv, EzPickle):
             (self.grid_size, self.grid_size),
         )
 
-        pygame.draw.rect(surface=surf, color=front_color, rect=front_rect)
-        pygame.draw.rect(surface=surf, color=back_color, rect=back_rect)
+        pygame.draw.rect(surface=surf, color=color["front"], rect=front_rect)
+        pygame.draw.rect(surface=surf, color=color["back"], rect=back_rect)
 
-    def draw_goal(self, agent: str, ego: bool = False, surf: pygame.Surface = None):
+    def draw_goal(
+        self,
+        agent: str,
+        color: Dict[str, Tuple[int, int, int]],
+        surf: pygame.Surface = None,
+    ):
         """
         draw the goal of the specified agent, if the goal location is not currently occupied
         `surf`: the pygame surface to plot on
@@ -435,13 +453,6 @@ class parallel_env(ParallelEnv, EzPickle):
         front = self.goals[agent]["front"]
         back = self.goals[agent]["back"]
 
-        if ego:
-            front_color = self._ego_front_color
-            back_color = self._ego_back_color
-        else:
-            front_color = self._other_front_color
-            back_color = self._other_back_color
-
         if len(self.occupancy[front]) == 0:
             front_rect = pygame.Rect(
                 self.g2i(*front),
@@ -449,7 +460,7 @@ class parallel_env(ParallelEnv, EzPickle):
             )
             pygame.draw.circle(
                 surface=surf,
-                color=front_color,
+                color=color["front"],
                 center=(
                     front_rect.left + self.grid_size / 2,
                     front_rect.top + self.grid_size / 2,
@@ -464,7 +475,7 @@ class parallel_env(ParallelEnv, EzPickle):
             )
             pygame.draw.circle(
                 surface=surf,
-                color=back_color,
+                color=color["back"],
                 center=(
                     back_rect.left + self.grid_size / 2,
                     back_rect.top + self.grid_size / 2,
@@ -481,20 +492,36 @@ class parallel_env(ParallelEnv, EzPickle):
         self.screen.blit(self.background, (0, 0))
 
         # Draw agents
-        for agent in self.agents:
-            self.draw_car(agent)
+        for i, agent in enumerate(self.agents):
+            self.draw_car(agent, color=self._colors[i])
 
     def observe(self, agent: str) -> np.ndarray:
         """
-        get agent-specific observation. Here we use the current drawing of the environment, but fill a different color for the agent itself, and also plot the goal positions on the image.
-
-        This function should be called after `self.draw()` is called
+        get agent-specific observation.
         """
-        surf = self.screen.copy()
+        surf = self.background.copy()
 
         # Re-plot the car itself with ego color again
-        self.draw_goal(agent=agent, ego=True, surf=surf)
-        self.draw_car(agent=agent, ego=True, surf=surf)
+        self.draw_goal(agent=agent, color=self._colors[0], surf=surf)
+        self.draw_car(agent=agent, color=self._colors[0], surf=surf)
+
+        # Draw all goals first
+        i = 1  # Index of color
+        for _agent in self.agents:
+            if _agent == agent:
+                continue
+            else:
+                self.draw_goal(agent=_agent, color=self._colors[i], surf=surf)
+                i += 1
+
+        # Draw all cars next to cover goals
+        i = 1  # Index of color
+        for _agent in self.agents:
+            if _agent == agent:
+                continue
+            else:
+                self.draw_car(agent=_agent, color=self._colors[i], surf=surf)
+                i += 1
 
         # Return an image
         observation = pygame.surfarray.pixels3d(surf)
