@@ -201,10 +201,10 @@ class parallel_env(ParallelEnv, EzPickle):
 
         if "vehicle_1" in self.possible_agents:
             # ========== Enable this part to make vehicle_1 use its own states
-            self.states["vehicle_1"] = {"front": (8, 7), "back": (9, 7)}
-            self.occupancy[(8, 7)].add("vehicle_1")
-            self.occupancy[(9, 7)].add("vehicle_1")
-            self.goals["vehicle_1"] = {"front": (6, 3), "back": (6, 4)}
+            # self.states["vehicle_1"] = {"front": (8, 7), "back": (9, 7)}
+            # self.occupancy[(8, 7)].add("vehicle_1")
+            # self.occupancy[(9, 7)].add("vehicle_1")
+            # self.goals["vehicle_1"] = {"front": (6, 3), "back": (6, 4)}
 
             # ========== Enable this part to make vehicle_1 use vehicle_2 states
             # self.states["vehicle_1"] = {"front": (6, 5), "back": (6, 4)}
@@ -213,10 +213,10 @@ class parallel_env(ParallelEnv, EzPickle):
             # self.goals["vehicle_1"] = {"front": (1, 7), "back": (2, 7)}
 
             # ========= Enable this part to make vehicle_1 use vehicle_3 states
-            # self.states["vehicle_1"] = {"front": (5, 6), "back": (4, 6)}
-            # self.occupancy[(5, 6)].add("vehicle_1")
-            # self.occupancy[(4, 6)].add("vehicle_1")
-            # self.goals["vehicle_1"] = {"front": (6, 10), "back": (6, 9)}
+            self.states["vehicle_1"] = {"front": (5, 6), "back": (4, 6)}
+            self.occupancy[(5, 6)].add("vehicle_1")
+            self.occupancy[(4, 6)].add("vehicle_1")
+            self.goals["vehicle_1"] = {"front": (6, 10), "back": (6, 9)}
 
         if "vehicle_2" in self.possible_agents:
             self.states["vehicle_2"] = {"front": (6, 5), "back": (6, 4)}

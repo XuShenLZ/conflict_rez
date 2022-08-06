@@ -3,12 +3,12 @@ from confrez.rl.utils import ProcessMonitor
 from stable_baselines3 import DQN, PPO
 import supersuit as ss
 
-env = parallel_env(n_vehicles=3)
+env = parallel_env(n_vehicles=2)
 env = ss.resize_v1(env, 140, 140)
 # monitor = ProcessMonitor(env)
 
 # model = PPO.load("PPO-CNN_07-31-2022_10-12-36")
-model = DQN.load("DQN-CNN-3v-new-color_08-05-2022_17-42-20")
+model = DQN.load("DQN-CNN-2v-1-4-new-color_08-05-2022_23-21-24")
 
 observations = env.reset(seed=0)
 env.render()
