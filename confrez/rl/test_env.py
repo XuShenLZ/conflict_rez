@@ -29,7 +29,7 @@ print("passed render test")
 
 # test_save_obs(aec_env())
 
-env = parallel_env(n_vehicles=2)
+env = parallel_env(n_vehicles=3)
 
 monitor = ProcessMonitor(env)
 
