@@ -9,15 +9,15 @@ from os import path as os_path
 
 cwd = os_path.dirname(__file__)
 
-MODEL_NAME = "DQN-CNN-2v-1-4-new-color"
+MODEL_NAME = "DQN-CNN-4v-new-color"
 
-env = parallel_env(n_vehicles=2)
+env = parallel_env(n_vehicles=4)
 env = ss.black_death_v3(env)
 env = ss.resize_v1(env, 140, 140)
 # env = ss.color_reduction_v0(env, mode="B")
 # env = ss.frame_stack_v2(env, 3)
 env = ss.pettingzoo_env_to_vec_env_v1(env)
-env = ss.concat_vec_envs_v1(env, 16, num_cpus=8, base_class="stable_baselines3")
+env = ss.concat_vec_envs_v1(env, 24, num_cpus=12, base_class="stable_baselines3")
 
 now = datetime.now()
 timestamp = now.strftime("%m-%d-%Y_%H-%M-%S")
@@ -51,17 +51,17 @@ def step_schedule(
 model = DQN(
     "CnnPolicy",
     env,
-    learning_rate=step_schedule(0.0005, [1, 0.8, 0.3], [1, 0.5, 0.1]),
+    learning_rate=step_schedule(0.0005, [1, 0.8, 0.6, 0.3], [1, 0.5, 0.1, 0.05]),
     verbose=3,
-    buffer_size=70000,
+    buffer_size=100000,
     learning_starts=500,
-    exploration_fraction=0.3,
-    exploration_final_eps=0.4,
+    exploration_fraction=0.6,
+    exploration_final_eps=0.2,
     tensorboard_log=f"{cwd}/DQN-CNN_tensorboard/",
 )
 
 model.learn(
-    total_timesteps=6000000,
+    total_timesteps=50000000,
     tb_log_name=f"{MODEL_NAME}_{timestamp}",
 )
 model.save(f"{MODEL_NAME}_{timestamp}")

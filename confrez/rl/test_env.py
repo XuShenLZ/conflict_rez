@@ -29,7 +29,7 @@ print("passed render test")
 
 # test_save_obs(aec_env())
 
-env = parallel_env(n_vehicles=3)
+env = parallel_env(n_vehicles=4)
 
 monitor = ProcessMonitor(env)
 
@@ -41,7 +41,8 @@ max_cycles = 500
 for step in range(max_cycles):
     actions = {agent: env.action_space(agent).sample() for agent in env.agents}
     print(actions)
-    monitor.show(observations=observations, actions=actions, notes="Before step")
+    # monitor.show(observations=observations, actions=actions, notes="Before step")
     observations, rewards, dones, infos = env.step(actions)
+    print(rewards)
     env.render()
     print(f"step: {step}")

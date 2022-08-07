@@ -57,7 +57,7 @@ class parallel_env(ParallelEnv, EzPickle):
         # "has_manual_policy": True,
     }
 
-    def __init__(self, n_vehicles=4, max_cycles=100):
+    def __init__(self, n_vehicles=4, max_cycles=500):
         EzPickle.__init__(self, n_vehicles, max_cycles)
         self.n_vehicles = n_vehicles
 
@@ -201,10 +201,10 @@ class parallel_env(ParallelEnv, EzPickle):
 
         if "vehicle_1" in self.possible_agents:
             # ========== Enable this part to make vehicle_1 use its own states
-            # self.states["vehicle_1"] = {"front": (8, 7), "back": (9, 7)}
-            # self.occupancy[(8, 7)].add("vehicle_1")
-            # self.occupancy[(9, 7)].add("vehicle_1")
-            # self.goals["vehicle_1"] = {"front": (6, 3), "back": (6, 4)}
+            self.states["vehicle_1"] = {"front": (8, 7), "back": (9, 7)}
+            self.occupancy[(8, 7)].add("vehicle_1")
+            self.occupancy[(9, 7)].add("vehicle_1")
+            self.goals["vehicle_1"] = {"front": (6, 3), "back": (6, 4)}
 
             # ========== Enable this part to make vehicle_1 use vehicle_2 states
             # self.states["vehicle_1"] = {"front": (6, 5), "back": (6, 4)}
@@ -213,10 +213,10 @@ class parallel_env(ParallelEnv, EzPickle):
             # self.goals["vehicle_1"] = {"front": (1, 7), "back": (2, 7)}
 
             # ========= Enable this part to make vehicle_1 use vehicle_3 states
-            self.states["vehicle_1"] = {"front": (5, 6), "back": (4, 6)}
-            self.occupancy[(5, 6)].add("vehicle_1")
-            self.occupancy[(4, 6)].add("vehicle_1")
-            self.goals["vehicle_1"] = {"front": (6, 10), "back": (6, 9)}
+            # self.states["vehicle_1"] = {"front": (5, 6), "back": (4, 6)}
+            # self.occupancy[(5, 6)].add("vehicle_1")
+            # self.occupancy[(4, 6)].add("vehicle_1")
+            # self.goals["vehicle_1"] = {"front": (6, 10), "back": (6, 9)}
 
         if "vehicle_2" in self.possible_agents:
             self.states["vehicle_2"] = {"front": (6, 5), "back": (6, 4)}
@@ -379,6 +379,14 @@ class parallel_env(ParallelEnv, EzPickle):
 
         if len(self.occupancy[front]) > 1 or len(self.occupancy[back]) > 1:
             return True
+        elif np.abs(front[0] - back[0]) + np.abs(front[1] - back[1]) > 1:
+            # If the vehicle is heading along diagonal direction
+            # Get the coordinates of the other two diagonal grids
+            x1 = (front[0], back[1])
+            x2 = (back[0], front[1])
+            # If another vehicle is in x1 and x2 at the same time, then it also collide with us
+            if len(self.occupancy[x1].intersection(self.occupancy[x2])) > 0:
+                return True
         else:
             return False
 
@@ -616,26 +624,33 @@ class parallel_env(ParallelEnv, EzPickle):
                     rewards[agent] += -1e3
                 self.states_history[agent].append(self.states[agent])
 
-            agents_with_collision = []
-            # Check collision or goal completion
+            agents_with_collision = set()
+            # Check collision or goal completion and apply costs
             for agent in self.agents:
-                if self.has_collision(agent):
+                # The time cost for vehicle
+                rewards[agent] += -1
+
+                if actions[agent] == 0:
+                    # If the vehicle remain stationary, it will get a small penalty
+                    rewards[agent] += -10
+                # All the following situations mean that the vehicle moves
+                elif self.has_collision(agent):
                     # If collide with other agents, mark the agent name and apply huge penalty
-                    agents_with_collision.append(agent)
+                    agents_with_collision.add(agent)
                     rewards[agent] += -1e3
                 elif self.reach_goal(agent):
                     # If reach the goal, the agent will be done and get huge reward
                     dones[agent] = True
                     rewards[agent] += 1e4
-                elif actions[agent] == 0:
-                    # If the vehicle remain stationary, it will get a small penalty
-                    rewards[agent] += -10
-                else:
-                    # The time cost for vehicle
-                    rewards[agent] += -1
 
             for agent in agents_with_collision:
                 self.move(agent, self.reverse_action(actions[agent]))
+
+            if len(agents_with_collision) > 0:
+                for agent in set(self.agents) - agents_with_collision:
+                    # It is possible that the vehicles in collision set apply reverse action and hit some innocent vehicles, this block detects this case and reverse their action too
+                    if self.has_collision(agent):
+                        self.move(agent, self.reverse_action(actions[agent]))
 
             for agent in self.agents:
                 # The further the vehicle is away from the goal, the larger the penalty
