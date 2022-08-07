@@ -501,8 +501,8 @@ class parallel_env(ParallelEnv, EzPickle):
         self.screen.blit(self.background, (0, 0))
 
         # Draw agents
-        for i, agent in enumerate(self.agents):
-            self.draw_car(agent, color=self._colors[i])
+        for agent in self.agents:
+            self.draw_car(agent, color=self._colors[self.agent_name_mapping[agent]])
 
     def observe(self, agent: str) -> np.ndarray:
         """
