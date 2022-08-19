@@ -1,6 +1,7 @@
 import functools
 from itertools import product
 from typing import Dict, Set, Tuple
+import random
 
 from gym.spaces import Box, Discrete
 import numpy as np
@@ -57,7 +58,7 @@ class parallel_env(ParallelEnv, EzPickle):
         # "has_manual_policy": True,
     }
 
-    def __init__(self, n_vehicles=4, max_cycles=500):
+    def __init__(self, n_vehicles=4, max_cycles=500, seed=None, random_reset=False):
         EzPickle.__init__(self, n_vehicles, max_cycles)
         self.n_vehicles = n_vehicles
 
@@ -75,6 +76,7 @@ class parallel_env(ParallelEnv, EzPickle):
         self.agent_name_mapping = dict(
             zip(self.possible_agents, list(range(self.n_vehicles)))
         )
+        self.random_reset = random_reset
 
         # Observation space for each vehicle is the entire display window
         self.observation_spaces = dict(
@@ -137,6 +139,25 @@ class parallel_env(ParallelEnv, EzPickle):
             6: [-1, np.pi / 4],
         }
 
+        self.agent_configs = [
+            {
+                "init_state": {"front": (6, 8), "back": (6, 7)},
+                "goal": {"front": (12, 6), "back": (11, 6)},
+            },
+            {
+                "init_state": {"front": (8, 7), "back": (9, 7)},
+                "goal": {"front": (6, 3), "back": (6, 4)},
+            },
+            {
+                "init_state": {"front": (6, 5), "back": (6, 4)},
+                "goal": {"front": (1, 7), "back": (2, 7)},
+            },
+            {
+                "init_state": {"front": (5, 6), "back": (4, 6)},
+                "goal": {"front": (6, 10), "back": (6, 9)},
+            },
+        ]
+
         # Function to return the index of the reverse action. e.g. the reverse of action #1 [1, -np.pi / 4] is action #6 [-1, np.pi / 4], the reverse of action #0 is still 0
         self.reverse_action = lambda x: (7 - x) % 7
 
@@ -145,7 +166,7 @@ class parallel_env(ParallelEnv, EzPickle):
         self.cycle_done = False
 
         self.closed = False
-        self.seed()
+        self.seed(seed)
 
         pygame.init()
         self.renderOn = False
@@ -174,7 +195,7 @@ class parallel_env(ParallelEnv, EzPickle):
             {"front": (200, 255, 0), "back": (100, 128, 0)},
         ]
 
-        self.init_vehicle_walls()
+        self.init_walls()
 
     def g2i(self, x: int, y: int) -> Tuple[int, int]:
         """
@@ -182,55 +203,31 @@ class parallel_env(ParallelEnv, EzPickle):
         """
         return x * self.grid_size, (self.n_total_grids - y - 1) * self.grid_size
 
-    def init_vehicle_walls(self):
+    def init_vehicles(self):
+        if self.random_reset:
+            n_vehicles = random.choice(range(1, self.n_vehicles + 1))
+            self.agents = sorted(random.sample(self.possible_agents, n_vehicles))
+
+            configs = random.sample(self.agent_configs, n_vehicles)
+        else:
+            self.agents = self.possible_agents[:]
+            configs = self.agent_configs[:]
+
+        self.states = {agent: {"front": None, "back": None} for agent in self.agents}
+        self.goals = {agent: {"front": None, "back": None} for agent in self.agents}
+
+        for agent, config in zip(self.agents, configs):
+            init_state = config["init_state"].copy()
+            self.states[agent] = init_state
+            self.occupancy[init_state["front"]].add(agent)
+            self.occupancy[init_state["back"]].add(agent)
+
+            self.goals[agent] = config["goal"]
+
+    def init_walls(self):
         """
-        initialize the initial & terminal states of the vehicle, and the location of the walls
-
-        For now, it is a deterministic case
+        initialize the location of the walls and add occupancy
         """
-        # Reset the occupancy map
-        self.occupancy = {
-            xy: set() for xy in product(range(self.n_total_grids), repeat=2)
-        }
-
-        if "vehicle_0" in self.possible_agents:
-            self.states["vehicle_0"] = {"front": (6, 8), "back": (6, 7)}
-            self.occupancy[(6, 8)].add("vehicle_0")
-            self.occupancy[(6, 7)].add("vehicle_0")
-            self.goals["vehicle_0"] = {"front": (12, 6), "back": (11, 6)}
-
-        if "vehicle_1" in self.possible_agents:
-            # ========== Enable this part to make vehicle_1 use its own states
-            self.states["vehicle_1"] = {"front": (8, 7), "back": (9, 7)}
-            self.occupancy[(8, 7)].add("vehicle_1")
-            self.occupancy[(9, 7)].add("vehicle_1")
-            self.goals["vehicle_1"] = {"front": (6, 3), "back": (6, 4)}
-
-            # ========== Enable this part to make vehicle_1 use vehicle_2 states
-            # self.states["vehicle_1"] = {"front": (6, 5), "back": (6, 4)}
-            # self.occupancy[(6, 5)].add("vehicle_1")
-            # self.occupancy[(6, 4)].add("vehicle_1")
-            # self.goals["vehicle_1"] = {"front": (1, 7), "back": (2, 7)}
-
-            # ========= Enable this part to make vehicle_1 use vehicle_3 states
-            # self.states["vehicle_1"] = {"front": (5, 6), "back": (4, 6)}
-            # self.occupancy[(5, 6)].add("vehicle_1")
-            # self.occupancy[(4, 6)].add("vehicle_1")
-            # self.goals["vehicle_1"] = {"front": (6, 10), "back": (6, 9)}
-
-        if "vehicle_2" in self.possible_agents:
-            self.states["vehicle_2"] = {"front": (6, 5), "back": (6, 4)}
-            self.occupancy[(6, 5)].add("vehicle_2")
-            self.occupancy[(6, 4)].add("vehicle_2")
-            self.goals["vehicle_2"] = {"front": (1, 7), "back": (2, 7)}
-
-        if "vehicle_3" in self.possible_agents:
-            self.states["vehicle_3"] = {"front": (5, 6), "back": (4, 6)}
-            self.occupancy[(5, 6)].add("vehicle_3")
-            self.occupancy[(4, 6)].add("vehicle_3")
-            self.goals["vehicle_3"] = {"front": (6, 10), "back": (6, 9)}
-
-        # ============ Walls
         # ==== Top
         for x, y in product(
             range(self.n_total_grids),
@@ -579,11 +576,6 @@ class parallel_env(ParallelEnv, EzPickle):
         if seed is not None:
             self.seed(seed)
 
-        self.agents = self.possible_agents[:]
-
-        self.states = {agent: {"front": None, "back": None} for agent in self.agents}
-        self.goals = {agent: {"front": None, "back": None} for agent in self.agents}
-
         self.frame = 0
         self.cycle_done = False
 
@@ -592,7 +584,8 @@ class parallel_env(ParallelEnv, EzPickle):
             xy: set() for xy in product(range(self.n_total_grids), repeat=2)
         }
 
-        self.init_vehicle_walls()
+        self.init_walls()
+        self.init_vehicles()
 
         self.draw()
 

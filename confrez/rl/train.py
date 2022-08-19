@@ -9,9 +9,9 @@ from os import path as os_path
 
 cwd = os_path.dirname(__file__)
 
-MODEL_NAME = "DQN-CNN-1v-new-color"
+MODEL_NAME = "DQN-CNN-4v-mixed"
 
-env = parallel_env(n_vehicles=1)
+env = parallel_env(n_vehicles=4, seed=1, random_reset=True)
 env = ss.black_death_v3(env)
 env = ss.resize_v1(env, 140, 140)
 # env = ss.color_reduction_v0(env, mode="B")
@@ -51,17 +51,17 @@ def step_schedule(
 model = DQN(
     "CnnPolicy",
     env,
-    learning_rate=step_schedule(0.005, [1, 0.8, 0.3], [1, 0.1, 0.05]),
+    learning_rate=step_schedule(0.0005, [1, 0.8, 0.6, 0.3], [1, 0.5, 0.1, 0.05]),
     verbose=3,
-    buffer_size=50000,
+    buffer_size=100000,
     learning_starts=500,
     exploration_fraction=0.7,
-    exploration_final_eps=0.3,
+    exploration_final_eps=0.2,
     tensorboard_log=f"{cwd}/DQN-CNN_tensorboard/",
 )
 
 model.learn(
-    total_timesteps=3000000,
+    total_timesteps=150000000,
     tb_log_name=f"{MODEL_NAME}_{timestamp}",
 )
 model.save(f"{MODEL_NAME}_{timestamp}")
