@@ -15,12 +15,12 @@ setuptools.setup(
         "casadi",
         "pytope",
         "pettingzoo",
-        "ray[tune]",
         "stable-baselines3[extra]",
         "supersuit",
         "jupyterlab",
         "pygame",
         "pymunk",
+        "triangle",
     ],
     # install pytorch according to CUDA version / CPU
 )

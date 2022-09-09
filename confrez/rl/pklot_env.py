@@ -615,7 +615,6 @@ class parallel_env(ParallelEnv, EzPickle):
                 hit_wall = self.move(agent=agent, action=actions[agent])
                 if hit_wall:
                     rewards[agent] += -1e3
-                self.states_history[agent].append(self.states[agent])
 
             agents_with_collision = set()
             # Check collision or goal completion and apply costs
@@ -649,6 +648,7 @@ class parallel_env(ParallelEnv, EzPickle):
                 # The further the vehicle is away from the goal, the larger the penalty
                 rewards[agent] += -self.dist2goal(agent)
 
+            self.states_history[agent].append(self.states[agent])
             self.draw()
 
             observations = {agent: self.observe(agent) for agent in self.agents}
