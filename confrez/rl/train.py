@@ -7,6 +7,15 @@ from scipy import interpolate
 from datetime import datetime
 from os import path as os_path
 
+#wandb
+import wandb
+from wandb.integration.sb3 import WandbCallback
+run = wandb.init(project="rl-parking", 
+                entity="chengtianyue",
+                sync_tensorboard=True,
+                save_code=True
+                )
+
 cwd = os_path.dirname(__file__)
 
 MODEL_NAME = "DQN-CNN-4v-mixed"
@@ -63,6 +72,11 @@ model = DQN(
 model.learn(
     total_timesteps=150000000,
     tb_log_name=f"{MODEL_NAME}_{timestamp}",
+    callback=WandbCallback(
+        gradient_save_freq=100,
+        model_save_path=f"models/{run.id}",
+        verbose=2,
+    )
 )
 model.save(f"{MODEL_NAME}_{timestamp}")
 print("Training Finished")
