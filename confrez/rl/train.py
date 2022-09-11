@@ -6,22 +6,17 @@ from torch import nn, tensor
 from stable_baselines3 import PPO, DQN
 from stable_baselines3.dqn import CnnPolicy
 from stable_baselines3.common import results_plotter
-from stable_baselines3.common.callbacks import BaseCallback
-from stable_baselines3.common.env_checker import check_env
-from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
-from stable_baselines3.common.vec_env.dummy_vec_env import DummyVecEnv
-from stable_baselines3.common.vec_env.subproc_vec_env import SubprocVecEnv
 from scipy import interpolate
 
 from datetime import datetime
 from os import path as os_path
 
-wandb
 import wandb
 from wandb.integration.sb3 import WandbCallback
 run = wandb.init(project="rl-parking", 
                 entity="chengtianyue",
+                monitor_gym=True,
                 sync_tensorboard=True
                 )
 
@@ -130,5 +125,6 @@ model.learn(
         verbose=2,
     )
 )
+
 model.save(f"{MODEL_NAME}_{timestamp}")
 print("Training Finished")
