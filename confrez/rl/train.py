@@ -108,9 +108,10 @@ model = DQN(
     env,
     policy_kwargs=policy_kwargs,
     learning_rate=step_schedule(0.0005, [1, 0.8, 0.6, 0.3], [1, 0.5, 0.1, 0.05]),
-    verbose=3,
+    verbose=0,
     buffer_size=100000,
     learning_starts=500,
+    gamma=0.993,
     exploration_fraction=0.7,
     exploration_final_eps=0.2,
     tensorboard_log=f"{cwd}/DQN-CNN_tensorboard/",
@@ -122,7 +123,9 @@ model.learn(
     callback=WandbCallback(
         gradient_save_freq=100,
         model_save_path=f"models/{run.id}",
+        model_save_freq=3000,
         verbose=2,
+        log = "all"
     )
 )
 
