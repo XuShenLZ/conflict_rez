@@ -5,9 +5,10 @@ import torch
 from torch import nn, tensor
 from stable_baselines3 import PPO, DQN
 from stable_baselines3.dqn import CnnPolicy
-from stable_baselines3.common import results_plotter
+# from stable_baselines3.common.monitor import Monitor
+# from stable_baselines3.common.results_plotter import load_results, ts2xy
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
-from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback, CallbackList
+from stable_baselines3.common.callbacks import CheckpointCallback, CallbackList
 from scipy import interpolate
 
 from datetime import datetime
@@ -25,10 +26,12 @@ run = wandb.init(project="rl-parking",
 cwd = os_path.dirname(__file__)
 
 MODEL_NAME = "DQN-Resnet-Extractor"
+# LOG_DIR = "./log_for_wandb/"
 
 env = parallel_env(n_vehicles=4, seed=1, random_reset=True)
 env = ss.black_death_v3(env)
 env = ss.resize_v1(env, 140, 140)
+# env = Monitor(env, LOG_DIR) # For plotting use
 # env = ss.color_reduction_v0(env, mode="B")
 # env = ss.frame_stack_v2(env, 3)
 env = ss.pettingzoo_env_to_vec_env_v1(env)
@@ -119,18 +122,29 @@ model = DQN(
     tensorboard_log=f"{cwd}/DQN-CNN_tensorboard/",
 )
 
-class SuperWandbCallback(WandbCallback):
-    def __init__(self, verbose=2):
-        super(WandbCallback, self).__init__(verbose)
+# This part intended to plot the reward. Still buggy
+# class SuperWandbCallback(WandbCallback):
+#     def __init__(self, verbose=2, gradient_save_freq=100, model_save_path=f"models/{run.id}"):
+#         super(WandbCallback, self).__init__(verbose)
+#         self.gradient_save_freq = gradient_save_freq
+#         self.model_save_path = model_save_path
+#         self.verbose = verbose
+#         self.log_dir = LOG_DIR
     
+#     def _on_step(self) -> bool:
+#         x, y = ts2xy(load_results(self.log_dir), 'timesteps')
+#         self.logger.record("cum_reward", sum(y))
+#         self.logger.record("reward_last_100", sum(y[-100:]))
+#         return True
+# wandb_callback = SuperWandbCallback()
 
-    def _on_step(self) -> bool:
-        self.logger.record('reward', sum(env.rewards))
-        self.logger.record('cum_reward', sum(env._accumulate_rewards))
-        return True
+wandb_callback = WandbCallback(
+        gradient_save_freq=100,
+        model_save_path=f"models/{run.id}",
+        verbose=2,
+    )
 
 checkpoint_callback = CheckpointCallback(save_freq=3000, save_path='./' + MODEL_NAME + '/')
-wandb_callback = SuperWandbCallback()
 callback = CallbackList([wandb_callback, checkpoint_callback])
 model.learn(
     total_timesteps=150000000,
