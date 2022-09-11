@@ -7,6 +7,7 @@ from stable_baselines3 import PPO, DQN
 from stable_baselines3.dqn import CnnPolicy
 from stable_baselines3.common import results_plotter
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
+from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback, CallbackList
 from scipy import interpolate
 
 from datetime import datetime
@@ -14,6 +15,7 @@ from os import path as os_path
 
 import wandb
 from wandb.integration.sb3 import WandbCallback
+
 run = wandb.init(project="rl-parking", 
                 entity="chengtianyue",
                 monitor_gym=True,
@@ -81,7 +83,7 @@ class ResidualBlock(nn.Module):
         return out
     
 class ParkingCNN(BaseFeaturesExtractor):
-    def __init__(self, observation_space, features_dim=256):
+    def __init__(self, observation_space, features_dim=128):
         super().__init__(observation_space, features_dim)
         in_channels = observation_space.shape[0]  # channels x height x width
         self.cnn = nn.Sequential(
@@ -101,14 +103,14 @@ class ParkingCNN(BaseFeaturesExtractor):
         return self.linear(self.cnn(obs))
 
 policy_kwargs = dict(features_extractor_class=ParkingCNN,
-                     features_extractor_kwargs=dict(features_dim=256))
+                     features_extractor_kwargs=dict(features_dim=128))
 
 model = DQN(
     CnnPolicy,
     env,
     policy_kwargs=policy_kwargs,
     learning_rate=step_schedule(0.0005, [1, 0.8, 0.6, 0.3], [1, 0.5, 0.1, 0.05]),
-    verbose=0,
+    verbose=3,
     buffer_size=100000,
     learning_starts=500,
     gamma=0.993,
@@ -117,16 +119,23 @@ model = DQN(
     tensorboard_log=f"{cwd}/DQN-CNN_tensorboard/",
 )
 
+class SuperWandbCallback(WandbCallback):
+    def __init__(self, verbose=2):
+        super(WandbCallback, self).__init__(verbose)
+    
+
+    def _on_step(self) -> bool:
+        self.logger.record('reward', sum(env.rewards))
+        self.logger.record('cum_reward', sum(env._accumulate_rewards))
+        return True
+
+checkpoint_callback = CheckpointCallback(save_freq=3000, save_path='./' + MODEL_NAME + '/')
+wandb_callback = SuperWandbCallback()
+callback = CallbackList([wandb_callback, checkpoint_callback])
 model.learn(
     total_timesteps=150000000,
     tb_log_name=f"{MODEL_NAME}_{timestamp}",
-    callback=WandbCallback(
-        gradient_save_freq=100,
-        model_save_path=f"models/{run.id}",
-        model_save_freq=3000,
-        verbose=2,
-        log = "all"
-    )
+    callback=callback
 )
 
 model.save(f"{MODEL_NAME}_{timestamp}")
