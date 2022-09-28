@@ -126,7 +126,6 @@ class parallel_env(ParallelEnv, EzPickle):
         self.goals = {
             agent: {"front": None, "back": None} for agent in self.possible_agents
         }
-        self.states_history = {agent: [] for agent in self.possible_agents}
 
         # Discrete action indices to move step length and turning direction
         self._action_to_inputs = {
@@ -591,7 +590,14 @@ class parallel_env(ParallelEnv, EzPickle):
 
         observations = {agent: self.observe(agent) for agent in self.agents}
 
-        return observations
+        if not return_info:
+            return observations
+        else:
+            infos = {
+                agent: {"states": self.states[agent].copy()} for agent in self.agents
+            }
+
+            return observations, infos
 
     def step(self, actions: Dict[str, int]):
         """
@@ -648,7 +654,7 @@ class parallel_env(ParallelEnv, EzPickle):
                 # The further the vehicle is away from the goal, the larger the penalty
                 rewards[agent] += -self.dist2goal(agent)
 
-            self.states_history[agent].append(self.states[agent])
+            infos[agent]["states"] = self.states[agent].copy()
             self.draw()
 
             observations = {agent: self.observe(agent) for agent in self.agents}
