@@ -8,10 +8,10 @@ from confrez.pytypes import PythonMsg
 
 @dataclass
 class GeofenceRegion:
-    x_max: float = field(default=14 * 2.5)
-    x_min: float = field(default=-2.5)
-    y_max: float = field(default=14 * 2.5)
-    y_min: float = field(default=-2.5)
+    x_max: float = field(default=13 * 2.5)
+    x_min: float = field(default=2.5)
+    y_max: float = field(default=11 * 2.5)
+    y_min: float = field(default=3 * 2.5)
 
     def xy(self):
         return np.array(

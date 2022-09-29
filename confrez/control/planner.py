@@ -1,6 +1,7 @@
-from typing import Tuple
+from typing import List, Tuple
 import casadi as ca
 import numpy as np
+from pytope import Polytope
 
 from scipy.interpolate import interp1d
 from confrez.control.utils import plot_car
@@ -9,7 +10,11 @@ from confrez.obstacle_types import GeofenceRegion
 from confrez.pytypes import VehiclePrediction
 from confrez.vehicle_types import VehicleBody, VehicleConfig
 from confrez.control.dynamic_model import kinematic_bicycle_ct
-from confrez.control.compute_sets import compute_initial_states, compute_sets
+from confrez.control.compute_sets import (
+    compute_initial_states,
+    compute_obstacles,
+    compute_sets,
+)
 
 import matplotlib.pyplot as plt
 
@@ -35,6 +40,7 @@ class ConflictPlanner(object):
         self.region = region
         self.rl_sets = compute_sets(rl_file_name)
         self.init_states = compute_initial_states(rl_file_name, vehicle_body)
+        self.obstacles = compute_obstacles()
 
         self.num_sets = len(self.rl_sets["vehicle_0"])
 
@@ -200,15 +206,85 @@ class ConflictPlanner(object):
 
         return result
 
+    def dual_ws(
+        self, zu0: VehiclePrediction, obstacles: List[Polytope]
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Warm start the dual variables
+        `zu0`: VehiclePrediction object including the state-input warm start
+        `obstacles`: List of pytope Polytope objects
+        return: warm starting solution of l and m
+        """
+        print("Solving Dual WS Problem...")
+        N = len(zu0.x)
+
+        n_obs = len(obstacles)
+
+        n_hps = []
+        for obs in obstacles:
+            n_hps.append(len(obs.b))
+
+        veh_G = self.vehicle_body.A
+        veh_g = self.vehicle_body.b
+
+        opti = ca.Opti()
+
+        l = opti.variable(sum(n_hps), N)
+        m = opti.variable(4 * n_obs, N)
+        d = opti.variable(n_obs, N)
+
+        obj = 0
+
+        opti.subject_to(ca.vec(l) >= 0)
+        opti.subject_to(ca.vec(m) >= 0)
+
+        for k in range(N):
+            t = ca.vertcat(zu0.x[k], zu0.y[k])
+            R = np.array(
+                [
+                    [np.cos(zu0.psi[k]), -np.sin(zu0.psi[k])],
+                    [np.sin(zu0.psi[k]), np.cos(zu0.psi[k])],
+                ]
+            )
+
+            for j, obs in enumerate(obstacles):
+                idx0 = sum(n_hps[:j])
+                idx1 = sum(n_hps[: j + 1])
+                lj = l[idx0:idx1, k]
+                mj = m[4 * j : 4 * (j + 1), k]
+
+                opti.subject_to(
+                    ca.dot(-veh_g, mj) + ca.dot((obs.A @ t - obs.b), lj) == d[j, k]
+                )
+                opti.subject_to(veh_G.T @ mj + R.T @ obs.A.T @ lj == np.zeros(2))
+                opti.subject_to(ca.dot(obs.A.T @ lj, obs.A.T @ lj) <= 1)
+
+                obj -= d[j, k]
+
+        opti.minimize(obj)
+
+        p_opts = {"expand": True}
+        s_opts = {"print_level": 5}
+        opti.solver("ipopt", p_opts, s_opts)
+
+        sol = opti.solve()
+        print(sol.stats()["return_status"])
+
+        return sol.value(l), sol.value(m)
+
     def solve(
         self,
         zu0: VehiclePrediction,
+        l0: np.ndarray,
+        m0: np.ndarray,
+        obstacles: List[Polytope],
         K: int = 5,
         N_per_set: int = 5,
         shrink_tube: float = 0.8,
         bound_dt: bool = False,
         dt_min: float = 0.001,
         dt_max: float = 0.5,
+        dmin: float = 0.05,
     ) -> VehiclePrediction:
         """
         `zu0`: state-input warm start
@@ -216,6 +292,15 @@ class ConflictPlanner(object):
         `K`: order of collocation polynomial
         Return: VehiclePrediction object for states and inputs
         """
+        n_obs = len(obstacles)
+
+        n_hps = []
+        for obs in obstacles:
+            n_hps.append(len(obs.b))
+
+        veh_G = self.vehicle_body.A
+        veh_g = self.vehicle_body.b
+
         # Interpolate for collocation
         fx0 = interp1d(zu0.t, zu0.x)
         fy0 = interp1d(zu0.t, zu0.y)
@@ -225,6 +310,9 @@ class ConflictPlanner(object):
 
         fa0 = interp1d(zu0.t, zu0.u_a)
         fw0 = interp1d(zu0.t, zu0.u_steer_dot)
+
+        fl0 = interp1d(zu0.t, l0, axis=1)
+        fm0 = interp1d(zu0.t, m0, axis=1)
 
         # Collocation intervals
         N = N_per_set * (self.num_sets - 1)
@@ -248,6 +336,9 @@ class ConflictPlanner(object):
         a_interp = fa0(t_interp)
         w_interp = fw0(t_interp)
 
+        l_interp = fl0(t_interp)
+        m_interp = fm0(t_interp)
+
         # Initial guess for time step
         dt0 = zu0.t[-1] / N
 
@@ -267,6 +358,9 @@ class ConflictPlanner(object):
 
         a = opti.variable(N, K + 1)
         w = opti.variable(N, K + 1)
+
+        l = [[opti.variable(sum(n_hps)) for _ in range(K + 1)] for _ in range(N)]
+        m = [[opti.variable(4 * n_obs) for _ in range(K + 1)] for _ in range(N)]
 
         J = 0
 
@@ -319,6 +413,13 @@ class ConflictPlanner(object):
                     )
                 )
 
+                # Dual multipliers. Note here that the l and m are lists of opti.variable
+                opti.subject_to(l[i][k] >= 0)
+                opti.set_initial(l[i][k], l_interp[:, i * K + k])
+
+                opti.subject_to(m[i][k] >= 0)
+                opti.set_initial(m[i][k], m_interp[:, i * K + k])
+
                 # Collocation constraints
                 state = ca.vertcat(x[i, k], y[i, k], psi[i, k], v[i, k], delta[i, k])
                 input = ca.vertcat(a[i, k], w[i, k])
@@ -342,6 +443,24 @@ class ConflictPlanner(object):
                     + delta[i, k] ** 2
                 )
                 J += B[k] * error * dt
+
+                # OBCA constraints
+                t = ca.vertcat(x[i, k], y[i, k])
+                R = ca.vertcat(
+                    ca.horzcat(ca.cos(psi[i, k]), -ca.sin(psi[i, k])),
+                    ca.horzcat(ca.sin(psi[i, k]), ca.cos(psi[i, k])),
+                )
+                for j, obs in enumerate(obstacles):
+                    idx0 = sum(n_hps[:j])
+                    idx1 = sum(n_hps[: j + 1])
+                    lj = l[i][k][idx0:idx1]
+                    mj = m[i][k][4 * j : 4 * (j + 1)]
+
+                    opti.subject_to(
+                        ca.dot(-veh_g, mj) + ca.dot((obs.A @ t - obs.b), lj) >= dmin
+                    )
+                    opti.subject_to(veh_G.T @ mj + R.T @ obs.A.T @ lj == np.zeros(2))
+                    opti.subject_to(ca.dot(obs.A.T @ lj, obs.A.T @ lj) == 1)
 
             # Continuity constraints
             if i >= 1:
@@ -581,6 +700,8 @@ class ConflictPlanner(object):
         """
         plt.figure(figsize=(10, 5))
         ax = plt.subplot(1, 2, 1)
+        for obstacle in self.obstacles:
+            obstacle.plot(ax, facecolor="b", alpha=0.5)
         for body_sets in self.rl_sets["vehicle_0"]:
             body_sets["front"].plot(ax, facecolor="g", alpha=0.5)
             body_sets["back"].plot(ax, facecolor="r", alpha=0.5)
@@ -628,7 +749,10 @@ def main():
     planner = ConflictPlanner()
     zu0 = planner.solve_ws(N=30)
     # planner.plot_result(zu0, key_stride=30)
-    result = planner.solve(zu0, K=5, N_per_set=5)
+    l0, m0 = planner.dual_ws(zu0=zu0, obstacles=planner.obstacles)
+    result = planner.solve(
+        zu0=zu0, l0=l0, m0=m0, obstacles=planner.obstacles, K=5, N_per_set=5
+    )
     planner.plot_result(result, key_stride=30)
 
 

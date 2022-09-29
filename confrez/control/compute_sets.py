@@ -1,3 +1,4 @@
+from itertools import product
 import pickle
 from typing import Dict, List, Tuple
 
@@ -153,6 +154,80 @@ def compute_initial_states(
     return initial_states
 
 
+def compute_obstacles(
+    L: float = 2.5, vb: VehicleBody = VehicleBody()
+) -> List[Polytope]:
+    obstacles = []
+    # Bottom left
+    obstacles.append(
+        Polytope(
+            [
+                [1.5 * L - vb.w / 2, 3 * L],
+                [1.5 * L - vb.w / 2, 5.5 * L],
+                [5.5 * L + vb.w / 2, 5.5 * L],
+                [5.5 * L + vb.w / 2, 3 * L],
+            ]
+        )
+    )
+    # Bottom center
+    obstacles.append(
+        Polytope(
+            [
+                [7.5 * L - vb.w / 2, 3 * L],
+                [7.5 * L - vb.w / 2, 5.5 * L],
+                [7.5 * L + vb.w / 2, 5.5 * L],
+                [7.5 * L + vb.w / 2, 3 * L],
+            ]
+        )
+    )
+    # Bottom right
+    obstacles.append(
+        Polytope(
+            [
+                [9.5 * L - vb.w / 2, 3 * L],
+                [9.5 * L - vb.w / 2, 5.5 * L],
+                [12.5 * L + vb.w / 2, 5.5 * L],
+                [12.5 * L + vb.w / 2, 3 * L],
+            ]
+        )
+    )
+    # Top left
+    obstacles.append(
+        Polytope(
+            [
+                [1.5 * L - vb.w / 2, 8.5 * L],
+                [1.5 * L - vb.w / 2, 11 * L],
+                [5.5 * L + vb.w / 2, 11 * L],
+                [5.5 * L + vb.w / 2, 8.5 * L],
+            ]
+        )
+    )
+    # Top center
+    obstacles.append(
+        Polytope(
+            [
+                [7.5 * L - vb.w / 2, 8.5 * L],
+                [7.5 * L - vb.w / 2, 11 * L],
+                [8.5 * L + vb.w / 2, 11 * L],
+                [8.5 * L + vb.w / 2, 8.5 * L],
+            ]
+        )
+    )
+    # Top right
+    obstacles.append(
+        Polytope(
+            [
+                [10.5 * L - vb.w / 2, 8.5 * L],
+                [10.5 * L - vb.w / 2, 11 * L],
+                [12.5 * L + vb.w / 2, 11 * L],
+                [12.5 * L + vb.w / 2, 8.5 * L],
+            ]
+        )
+    )
+
+    return obstacles
+
+
 def main():
     """
     main function
@@ -163,7 +238,20 @@ def main():
         file_name=file_name, vehicle_body=VehicleBody()
     )
     print(init_states)
+    obstacles = compute_obstacles()
 
+    plt.figure()
+    for x, y in product(range(14), repeat=2):
+        plt.axhline(y=y * 2.5, xmin=0, xmax=13 * 2.5)
+        plt.axvline(x=x * 2.5, ymin=0, ymax=13 * 2.5)
+    ax = plt.gca()
+    for p in obstacles:
+        p.plot(ax, facecolor="b")
+    ax.set_xlim(xmin=-2.5, xmax=15 * 2.5)
+    ax.set_ylim(ymin=-2.5, ymax=15 * 2.5)
+    ax.set_aspect("equal")
+
+    plt.figure()
     for i, body_sets in enumerate(rl_sets["vehicle_0"]):
         ax = plt.subplot(2, 4, i + 1)
         body_sets["front"].plot(ax, facecolor="g")
