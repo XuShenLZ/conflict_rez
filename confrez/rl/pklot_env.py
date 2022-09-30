@@ -654,7 +654,8 @@ class parallel_env(ParallelEnv, EzPickle):
                 # The further the vehicle is away from the goal, the larger the penalty
                 rewards[agent] += -self.dist2goal(agent)
 
-            infos[agent]["states"] = self.states[agent].copy()
+                infos[agent]["states"] = self.states[agent].copy()
+
             self.draw()
 
             observations = {agent: self.observe(agent) for agent in self.agents}

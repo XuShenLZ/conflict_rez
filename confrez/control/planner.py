@@ -1,3 +1,4 @@
+from math import ceil
 from typing import List, Tuple
 import casadi as ca
 import numpy as np
@@ -14,12 +15,13 @@ from confrez.control.compute_sets import (
     compute_initial_states,
     compute_obstacles,
     compute_sets,
+    interp_along_sets,
 )
 
 import matplotlib.pyplot as plt
 
 
-class ConflictPlanner(object):
+class SingleVehiclePlanner(object):
     """
     Planner for conflict resolution
     """
@@ -27,6 +29,7 @@ class ConflictPlanner(object):
     def __init__(
         self,
         rl_file_name: str = "1v_rl_traj",
+        agent: str = "vehicle_0",
         vehicle_body: VehicleBody = VehicleBody(),
         vehicle_config: VehicleConfig = VehicleConfig(),
         region: GeofenceRegion = GeofenceRegion(),
@@ -35,6 +38,7 @@ class ConflictPlanner(object):
         `vehicle_body`: VehicleBody object
         `vehicle_config`: VehicleConfig object
         """
+        self.rl_file_name = rl_file_name
         self.vehicle_body = vehicle_body
         self.vehicle_config = vehicle_config
         self.region = region
@@ -42,7 +46,8 @@ class ConflictPlanner(object):
         self.init_states = compute_initial_states(rl_file_name, vehicle_body)
         self.obstacles = compute_obstacles()
 
-        self.num_sets = len(self.rl_sets["vehicle_0"])
+        self.agent = agent
+        self.num_sets = len(self.rl_sets[self.agent])
 
     def collocation_coefficients(
         self, K: int
@@ -95,6 +100,7 @@ class ConflictPlanner(object):
         dt: float = 0.1,
         bounded_input: bool = False,
         shrink_tube: float = 0.8,
+        spline_ws: bool = False,
     ):
         """
         setup the warm start optimization problem
@@ -116,9 +122,9 @@ class ConflictPlanner(object):
 
         J = 0
 
-        opti.subject_to(x[0] == self.init_states["vehicle_0"].x.x)
-        opti.subject_to(y[0] == self.init_states["vehicle_0"].x.y)
-        opti.subject_to(psi[0] == self.init_states["vehicle_0"].e.psi)
+        opti.subject_to(x[0] == self.init_states[self.agent].x.x)
+        opti.subject_to(y[0] == self.init_states[self.agent].x.y)
+        opti.subject_to(psi[0] == self.init_states[self.agent].e.psi)
         opti.subject_to(v[0] == 0)
         opti.subject_to(delta[0] == 0)
 
@@ -167,19 +173,27 @@ class ConflictPlanner(object):
             k = N * i
 
             back = ca.vertcat(x[k], y[k])
-            A = self.rl_sets["vehicle_0"][i]["back"].A
-            b = self.rl_sets["vehicle_0"][i]["back"].b
+            A = self.rl_sets[self.agent][i]["back"].A
+            b = self.rl_sets[self.agent][i]["back"].b
             opti.subject_to(A @ back <= b - shrink_tube)
 
             front = ca.vertcat(
                 x[k] + self.vehicle_body.wb * ca.cos(psi[k]),
                 y[k] + self.vehicle_body.wb * ca.sin(psi[k]),
             )
-            A = self.rl_sets["vehicle_0"][i]["front"].A
-            b = self.rl_sets["vehicle_0"][i]["front"].b
+            A = self.rl_sets[self.agent][i]["front"].A
+            b = self.rl_sets[self.agent][i]["front"].b
             opti.subject_to(A @ front <= b - shrink_tube)
 
         opti.minimize(J)
+
+        if spline_ws:
+            interp_waypoints = interp_along_sets(
+                file_name=self.rl_file_name, vehicle_body=self.vehicle_body, N=N
+            )[self.agent]
+            opti.set_initial(x, interp_waypoints[:, 0])
+            opti.set_initial(y, interp_waypoints[:, 1])
+            opti.set_initial(psi, interp_waypoints[:, 2])
 
         p_opts = {"expand": True}
         s_opts = {
@@ -364,9 +378,9 @@ class ConflictPlanner(object):
 
         J = 0
 
-        opti.subject_to(x[0, 0] == self.init_states["vehicle_0"].x.x)
-        opti.subject_to(y[0, 0] == self.init_states["vehicle_0"].x.y)
-        opti.subject_to(psi[0, 0] == self.init_states["vehicle_0"].e.psi)
+        opti.subject_to(x[0, 0] == self.init_states[self.agent].x.x)
+        opti.subject_to(y[0, 0] == self.init_states[self.agent].x.y)
+        opti.subject_to(psi[0, 0] == self.init_states[self.agent].e.psi)
 
         opti.subject_to(v[0, 0] == 0)
         opti.subject_to(delta[0, 0] == 0)
@@ -487,16 +501,16 @@ class ConflictPlanner(object):
                 q, r = divmod(i, N_per_set)
                 if r == 0:
                     back = ca.vertcat(x[i, 0], y[i, 0])
-                    tA = self.rl_sets["vehicle_0"][q]["back"].A
-                    tb = self.rl_sets["vehicle_0"][q]["back"].b
+                    tA = self.rl_sets[self.agent][q]["back"].A
+                    tb = self.rl_sets[self.agent][q]["back"].b
                     opti.subject_to(tA @ back <= tb - shrink_tube)
 
                     front = ca.vertcat(
                         x[i, 0] + self.vehicle_body.wb * ca.cos(psi[i, 0]),
                         y[i, 0] + self.vehicle_body.wb * ca.sin(psi[i, 0]),
                     )
-                    tA = self.rl_sets["vehicle_0"][q]["front"].A
-                    tb = self.rl_sets["vehicle_0"][q]["front"].b
+                    tA = self.rl_sets[self.agent][q]["front"].A
+                    tb = self.rl_sets[self.agent][q]["front"].b
                     opti.subject_to(tA @ front <= tb - shrink_tube)
 
         # Final constraints
@@ -516,16 +530,16 @@ class ConflictPlanner(object):
 
         # RL set constraints
         back = ca.vertcat(zF[0], zF[1])
-        tA = self.rl_sets["vehicle_0"][-1]["back"].A
-        tb = self.rl_sets["vehicle_0"][-1]["back"].b
+        tA = self.rl_sets[self.agent][-1]["back"].A
+        tb = self.rl_sets[self.agent][-1]["back"].b
         opti.subject_to(tA @ back <= tb - shrink_tube)
 
         front = ca.vertcat(
             zF[0] + self.vehicle_body.wb * ca.cos(zF[2]),
             zF[1] + self.vehicle_body.wb * ca.sin(zF[2]),
         )
-        tA = self.rl_sets["vehicle_0"][-1]["front"].A
-        tb = self.rl_sets["vehicle_0"][-1]["front"].b
+        tA = self.rl_sets[self.agent][-1]["front"].A
+        tb = self.rl_sets[self.agent][-1]["front"].b
         opti.subject_to(tA @ front <= tb - shrink_tube)
         # opti.subject_to(zF[3] == 0)
         # opti.subject_to(zF[4] == 0)
@@ -702,7 +716,7 @@ class ConflictPlanner(object):
         ax = plt.subplot(1, 2, 1)
         for obstacle in self.obstacles:
             obstacle.plot(ax, facecolor="b", alpha=0.5)
-        for body_sets in self.rl_sets["vehicle_0"]:
+        for body_sets in self.rl_sets[self.agent]:
             body_sets["front"].plot(ax, facecolor="g", alpha=0.5)
             body_sets["back"].plot(ax, facecolor="r", alpha=0.5)
 
@@ -726,9 +740,11 @@ class ConflictPlanner(object):
         ax.plot(result.t, result.u_steer_dot, label="u_steer_dot")
         ax.legend()
 
-        plt.figure(figsize=(10, 5))
-        for i, body_sets in enumerate(self.rl_sets["vehicle_0"]):
-            ax = plt.subplot(2, 4, i + 1)
+        ncol = 4
+        nrow = ceil(self.num_sets / ncol)
+        plt.figure(figsize=(2.5 * ncol, 2.5 * nrow))
+        for i, body_sets in enumerate(self.rl_sets[self.agent]):
+            ax = plt.subplot(nrow, ncol, i + 1)
             body_sets["front"].plot(ax, facecolor="g", alpha=0.5)
             body_sets["back"].plot(ax, facecolor="r", alpha=0.5)
 
@@ -746,14 +762,15 @@ def main():
     """
     main
     """
-    planner = ConflictPlanner()
-    zu0 = planner.solve_ws(N=30)
+    planner = SingleVehiclePlanner(rl_file_name="3v_rl_traj", agent="vehicle_1")
+    zu0 = planner.solve_ws(N=30, shrink_tube=0.8, spline_ws=True)
     # planner.plot_result(zu0, key_stride=30)
     l0, m0 = planner.dual_ws(zu0=zu0, obstacles=planner.obstacles)
     result = planner.solve(
         zu0=zu0, l0=l0, m0=m0, obstacles=planner.obstacles, K=5, N_per_set=5
     )
     planner.plot_result(result, key_stride=30)
+    print("done")
 
 
 if __name__ == "__main__":
