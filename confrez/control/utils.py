@@ -23,6 +23,10 @@ def rot_mat_2d(angle):
     return Rot.from_euler("z", angle).as_matrix()[0:2, 0:2]
 
 
+def pi_2_pi(angle):
+    return (angle + pi) % (2 * pi) - pi
+
+
 def plot_car(x: float, y: float, yaw: float, vehicle_body: VehicleBody):
     car_color = "-k"
     rot = rot_mat_2d(-yaw)

@@ -7,9 +7,10 @@ import matplotlib.pyplot as plt
 from pytope import Polytope
 from math import ceil
 import numpy as np
-from scipy.interpolate import splprep, splev
 
 from collections import defaultdict
+from confrez.control.bezier import BezierPlanner
+from confrez.control.utils import pi_2_pi
 from confrez.pytypes import VehicleState
 from confrez.vehicle_types import VehicleBody
 
@@ -161,42 +162,80 @@ def convert_rl_states(
     return vehicle_state
 
 
-def interp_along_sets(file_name: str, vehicle_body: VehicleBody, N: int, L=2.5):
+def interp_along_sets(file_name: str, vehicle_body: VehicleBody, N: int):
     """
-    Compute a spline interpolation of vehicle reference point (x, y, psi) using the RL sets
+    Compute piecewise Bezier interpolation of vehicle reference point (x, y, psi) using the RL sets
     """
     with open(file_name + ".pkl", "rb") as f:
         rl_states_history = pickle.load(f)
 
-    interp_waypoints = {agent: np.array([]) for agent in rl_states_history}
+    path = {agent: [] for agent in rl_states_history}
+
+    planner = BezierPlanner(offset=2.5)
+
     for agent in rl_states_history:
-        xs = []
-        ys = []
-        for states in rl_states_history[agent]:
-            vehicle_state = convert_rl_states(states, vehicle_body)
-            xs.append(vehicle_state.x.x)
-            ys.append(vehicle_state.x.y)
+        for i in range(len(rl_states_history[agent]) - 1):
+            start_state = convert_rl_states(
+                states=rl_states_history[agent][i], vehicle_body=vehicle_body
+            )
+            end_state = convert_rl_states(
+                states=rl_states_history[agent][i + 1], vehicle_body=vehicle_body
+            )
 
-        tck, u = splprep([xs, ys], s=0)
-        u_new = []
-        # Sample N query points between every two sets
-        for i in range(len(u) - 1):
-            u_new.extend(list(np.linspace(u[i], u[i + 1], N, endpoint=False)))
-        u_new.append(1.0)
-        interp_x, interp_y = splev(u_new, tck)
-        interp_dx, interp_dy = splev(u_new, tck, der=1)
-        interp_psi = np.unwrap(np.arctan2(interp_dy, interp_dx))
+            if rl_states_history[agent][i + 1] == rl_states_history[agent][i]:
+                # Vehicle does not move
+                path_segment = np.array(
+                    [
+                        [start_state.x.x, start_state.x.y, start_state.e.psi]
+                        for _ in range(N)
+                    ]
+                )
+            elif start_state.e.psi == end_state.e.psi:
+                # Vehicle does not turn
+                path_segment = np.array(
+                    [
+                        [start_state.x.x, start_state.x.y, start_state.e.psi]
+                        for _ in range(N)
+                    ]
+                )
+                path_segment[:, 0] = np.linspace(
+                    start_state.x.x, end_state.x.x, N, endpoint=False
+                )
+                path_segment[:, 1] = np.linspace(
+                    start_state.x.y, end_state.x.y, N, endpoint=False
+                )
+            else:
+                if (
+                    rl_states_history[agent][i + 1]["front"]
+                    == rl_states_history[agent][i]["back"]
+                ):
+                    # Vehicle goes backward
+                    angle_offset = np.pi
+                else:
+                    angle_offset = 0
 
-        # Need to make sure the heading starts with the same phase
-        init_state = compute_initial_states(
-            file_name=file_name, vehicle_body=vehicle_body, L=L
+                start_state.e.psi = pi_2_pi(start_state.e.psi + angle_offset)
+                end_state.e.psi = pi_2_pi(end_state.e.psi + angle_offset)
+
+                path_segment = planner.interpolate(
+                    start_state=start_state, end_state=end_state, N=N
+                )
+
+                path_segment[:, 2] -= angle_offset
+
+            path[agent].append(path_segment)
+
+        final_state = convert_rl_states(
+            states=rl_states_history[agent][-1], vehicle_body=vehicle_body
         )
-        heading_offset = init_state[agent].e.psi - interp_psi[0]
-        interp_waypoints[agent] = np.stack(
-            [interp_x, interp_y, interp_psi + heading_offset]
-        ).T
+        path[agent].append(
+            np.array([[final_state.x.x, final_state.x.y, final_state.e.psi]])
+        )
 
-    return interp_waypoints
+        path[agent] = np.vstack(path[agent])
+        path[agent][:, 2] = np.unwrap(path[agent][:, 2])
+
+    return path
 
 
 def compute_initial_states(
