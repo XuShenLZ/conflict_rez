@@ -789,17 +789,23 @@ def main():
     main
     """
     init_offset = VehicleState()
-    init_offset.x.x = 0.1
-    init_offset.x.y = 0.1
-    init_offset.e.psi = np.pi / 20
+    # init_offset.x.x = 0.1
+    # init_offset.x.y = 0.1
+    # init_offset.e.psi = np.pi / 20
     planner = SingleVehiclePlanner(
-        rl_file_name="3v_rl_traj", agent="vehicle_0", init_offset=init_offset
+        rl_file_name="4v_rl_traj", agent="vehicle_3", init_offset=init_offset
     )
-    zu0 = planner.solve_ws(N=30, shrink_tube=0.8, spline_ws=False)
+    zu0 = planner.solve_ws(N=30, shrink_tube=0.5, spline_ws=True)
     # planner.plot_result(zu0, key_stride=30)
     l0, m0 = planner.dual_ws(zu0=zu0, obstacles=planner.obstacles)
     result = planner.solve(
-        zu0=zu0, l0=l0, m0=m0, obstacles=planner.obstacles, K=5, N_per_set=5
+        zu0=zu0,
+        l0=l0,
+        m0=m0,
+        obstacles=planner.obstacles,
+        K=5,
+        N_per_set=5,
+        shrink_tube=0.5,
     )
     planner.plot_result(result, key_stride=30)
     print("done")

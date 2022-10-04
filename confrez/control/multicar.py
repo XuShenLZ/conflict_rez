@@ -535,7 +535,7 @@ class MultiVehiclePlanner(object):
             print("====Solving single vehicle problem=======")
             print(agent)
             zu0 = self.single_planners[agent].solve_ws(
-                N=30, shrink_tube=0.8, spline_ws=self.ws_config[agent]
+                N=30, shrink_tube=0.5, spline_ws=self.ws_config[agent]
             )
             l0, m0 = self.single_planners[agent].dual_ws(
                 zu0=zu0, obstacles=self.single_planners[agent].obstacles
@@ -548,6 +548,7 @@ class MultiVehiclePlanner(object):
                 obstacles=self.single_planners[agent].obstacles,
                 K=5,
                 N_per_set=5,
+                shrink_tube=0.5,
             )
 
     def solve_final_problem(
@@ -717,13 +718,14 @@ def main():
         "vehicle_0": VehicleState(),
         "vehicle_1": VehicleState(),
         "vehicle_2": VehicleState(),
+        "vehicle_3": VehicleState(),
     }
-    init_offsets["vehicle_0"].x.x = 0.1
-    init_offsets["vehicle_0"].x.y = 0.1
-    init_offsets["vehicle_0"].e.psi = np.pi / 20
+    # init_offsets["vehicle_0"].x.x = 0.1
+    # init_offsets["vehicle_0"].x.y = 0.1
+    # init_offsets["vehicle_0"].e.psi = np.pi / 20
     planner = MultiVehiclePlanner(
-        rl_file_name="3v_rl_traj",
-        ws_config={"vehicle_0": False, "vehicle_1": True, "vehicle_2": True},
+        rl_file_name="4v_rl_traj",
+        ws_config={"vehicle_0": False, "vehicle_1": True, "vehicle_2": True, "vehicle_3": True},
         init_offsets=init_offsets,
     )
     planner.solve_single_problems()
