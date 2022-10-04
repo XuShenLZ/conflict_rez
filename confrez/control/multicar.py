@@ -23,6 +23,7 @@ from confrez.control.compute_sets import (
 from confrez.control.planner import SingleVehiclePlanner
 
 import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation, FFMpegWriter
 
 
 class Vehicle(object):
@@ -677,14 +678,15 @@ class MultiVehiclePlanner(object):
             )
         plt.axis("equal")
 
-        plt.figure()
-        for i in range(len(final_t)):
-            plt.cla()
-            ax = plt.gca()
+        fig = plt.figure()
+        ax = plt.gca()
+
+        def plot_frame(i):
+            ax.clear()
             for obstacle in self.obstacles:
                 obstacle.plot(ax, facecolor="b", alpha=0.5)
             for agent in self.agents:
-                plt.plot(
+                ax.plot(
                     np.array(sol.value(vehicles[agent].x)).flatten(),
                     np.array(sol.value(vehicles[agent].y)).flatten(),
                     label=agent,
@@ -695,8 +697,14 @@ class MultiVehiclePlanner(object):
                     final_sol[agent].psi[i],
                     vehicle_body=self.vehicle_body,
                 )
-            plt.axis("equal")
-            plt.pause(0.01)
+            ax.set_aspect("equal")
+
+        ani = FuncAnimation(
+            fig, plot_frame, frames=len(final_t), interval=40, repeat=True
+        )
+
+        writer = FFMpegWriter(fps=int(1000 / 40))
+        ani.save(self.rl_file_name + ".mp4", writer=writer)
 
         plt.show()
 
@@ -719,7 +727,7 @@ def main():
         init_offsets=init_offsets,
     )
     planner.solve_single_problems()
-    planner.solve_final_problem()
+    planner.solve_final_problem(shrink_tube=0.3)
 
 
 if __name__ == "__main__":
