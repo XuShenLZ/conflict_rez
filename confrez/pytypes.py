@@ -455,7 +455,8 @@ class VehiclePrediction(PythonMsg):
     Complete vehicle coordinates (local, global, and input)
     """
 
-    t: float = field(default=None)  # time in seconds
+    t: array.array = field(default=None)  # time in seconds
+    dt: float = field(default=None)
 
     x: array.array = field(default=None)  # global x coordinate in meters
     y: array.array = field(default=None)  # global y coordinate in meters
@@ -466,6 +467,9 @@ class VehiclePrediction(PythonMsg):
 
     a_x: array.array = field(default=None)  # global x acceleration in m/s^2
     a_y: array.array = field(default=None)  # global y acceleration in m/s^2
+
+    l: array.array = field(default=None)  # dual variable lambda
+    m: array.array = field(default=None)  # dual variable mu
 
     psi: array.array = field(default=None)  # global vehicle heading angle
     psidot: array.array = field(

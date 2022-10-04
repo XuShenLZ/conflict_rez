@@ -26,11 +26,20 @@ class VehicleBody(BasePolytopeObstacle):
     l: float = field(default=0)
     w: float = field(default=1.8)
 
+    # Circle Approximation
+    cr: float = field(default=0)  # Offset of the first circle center in front
+    cf: float = field(default=0)  # Offset of the first circle center at rear
+    num_circles: int = field(default=3)
+
     def __post_init__(self):
         self.offset = self.wb / 2
         self.lf = self.wb + self.hf
         self.lr = self.hr
         self.l = self.lf + self.lr
+
+        self.cf = 2.45
+        self.cr = -0.2
+        self.num_circles = 4
 
         self.__calc_V__()
         self.__calc_A_b__()
@@ -71,13 +80,11 @@ class VehicleConfig(PythonMsg):
     # Vehicle Limits
     v_max: float = field(default=2.5)  # maximum velocity
     v_min: float = field(default=-2.5)  # minimum velocity
-    a_max: float = field(default=1)  # maximum acceleration
-    a_min: float = field(default=-1)  # minimum acceleration
-    delta_max: float = field(default=0.75)  # maximum steering angle
-    delta_min: float = field(default=-0.75)  # minimum steering angle
-    w_delta_max: float = field(
-        default=0.5
-    )  # maximum angular velocity of steering angles
+    a_max: float = field(default=1.5)  # maximum acceleration
+    a_min: float = field(default=-1.5)  # minimum acceleration
+    delta_max: float = field(default=0.85)  # maximum steering angle
+    delta_min: float = field(default=-0.85)  # minimum steering angle
+    w_delta_max: float = field(default=1)  # maximum angular velocity of steering angles
     w_delta_min: float = field(
-        default=-0.5
+        default=-1
     )  # minimum angular velocity of steering angles

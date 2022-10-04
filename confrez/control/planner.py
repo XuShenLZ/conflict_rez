@@ -8,7 +8,7 @@ from scipy.interpolate import interp1d
 from confrez.control.utils import plot_car
 from confrez.obstacle_types import GeofenceRegion
 
-from confrez.pytypes import VehiclePrediction
+from confrez.pytypes import VehiclePrediction, VehicleState
 from confrez.vehicle_types import VehicleBody, VehicleConfig
 from confrez.control.dynamic_model import kinematic_bicycle_ct
 from confrez.control.compute_sets import (
@@ -30,9 +30,11 @@ class SingleVehiclePlanner(object):
         self,
         rl_file_name: str = "1v_rl_traj",
         agent: str = "vehicle_0",
+        init_offset: VehicleState = VehicleState(),
         vehicle_body: VehicleBody = VehicleBody(),
         vehicle_config: VehicleConfig = VehicleConfig(),
         region: GeofenceRegion = GeofenceRegion(),
+        verbose: int = 5,
     ) -> None:
         """
         `vehicle_body`: VehicleBody object
@@ -42,6 +44,9 @@ class SingleVehiclePlanner(object):
         self.vehicle_body = vehicle_body
         self.vehicle_config = vehicle_config
         self.region = region
+        self.verbose = verbose
+        self.init_offset = init_offset
+
         self.rl_sets = compute_sets(rl_file_name)
         self.init_states = compute_initial_states(rl_file_name, vehicle_body)
         self.obstacles = compute_obstacles()
@@ -105,6 +110,7 @@ class SingleVehiclePlanner(object):
         """
         setup the warm start optimization problem
         """
+        print("Solving state ws...")
         f_ct = kinematic_bicycle_ct(vehicle_body=self.vehicle_body)
 
         M = self.num_sets - 1
@@ -122,9 +128,11 @@ class SingleVehiclePlanner(object):
 
         J = 0
 
-        opti.subject_to(x[0] == self.init_states[self.agent].x.x)
-        opti.subject_to(y[0] == self.init_states[self.agent].x.y)
-        opti.subject_to(psi[0] == self.init_states[self.agent].e.psi)
+        opti.subject_to(x[0] == self.init_states[self.agent].x.x + self.init_offset.x.x)
+        opti.subject_to(y[0] == self.init_states[self.agent].x.y + self.init_offset.x.y)
+        opti.subject_to(
+            psi[0] == self.init_states[self.agent].e.psi + self.init_offset.e.psi
+        )
         opti.subject_to(v[0] == 0)
         opti.subject_to(delta[0] == 0)
 
@@ -169,7 +177,7 @@ class SingleVehiclePlanner(object):
             error = a[k] ** 2 + w[k] ** 2
             J += error
 
-        for i in range(self.num_sets):
+        for i in range(1, self.num_sets):
             k = N * i
 
             back = ca.vertcat(x[k], y[k])
@@ -197,7 +205,7 @@ class SingleVehiclePlanner(object):
 
         p_opts = {"expand": True}
         s_opts = {
-            "print_level": 5,
+            "print_level": self.verbose,
             "tol": 1e-2,
             "constr_viol_tol": 1e-2,
             "max_iter": 500,
@@ -205,6 +213,7 @@ class SingleVehiclePlanner(object):
         }
         opti.solver("ipopt", p_opts, s_opts)
         sol = opti.solve()
+        print(sol.stats()["return_status"])
 
         result = VehiclePrediction()
 
@@ -278,7 +287,7 @@ class SingleVehiclePlanner(object):
         opti.minimize(obj)
 
         p_opts = {"expand": True}
-        s_opts = {"print_level": 5}
+        s_opts = {"print_level": self.verbose}
         opti.solver("ipopt", p_opts, s_opts)
 
         sol = opti.solve()
@@ -306,6 +315,7 @@ class SingleVehiclePlanner(object):
         `K`: order of collocation polynomial
         Return: VehiclePrediction object for states and inputs
         """
+        print("Solving main opt...")
         n_obs = len(obstacles)
 
         n_hps = []
@@ -378,9 +388,15 @@ class SingleVehiclePlanner(object):
 
         J = 0
 
-        opti.subject_to(x[0, 0] == self.init_states[self.agent].x.x)
-        opti.subject_to(y[0, 0] == self.init_states[self.agent].x.y)
-        opti.subject_to(psi[0, 0] == self.init_states[self.agent].e.psi)
+        opti.subject_to(
+            x[0, 0] == self.init_states[self.agent].x.x + self.init_offset.x.x
+        )
+        opti.subject_to(
+            y[0, 0] == self.init_states[self.agent].x.y + self.init_offset.x.y
+        )
+        opti.subject_to(
+            psi[0, 0] == self.init_states[self.agent].e.psi + +self.init_offset.e.psi
+        )
 
         opti.subject_to(v[0, 0] == 0)
         opti.subject_to(delta[0, 0] == 0)
@@ -499,7 +515,7 @@ class SingleVehiclePlanner(object):
 
                 # RL set constraints
                 q, r = divmod(i, N_per_set)
-                if r == 0:
+                if r == 0 and i > 0:
                     back = ca.vertcat(x[i, 0], y[i, 0])
                     tA = self.rl_sets[self.agent][q]["back"].A
                     tb = self.rl_sets[self.agent][q]["back"].b
@@ -541,11 +557,12 @@ class SingleVehiclePlanner(object):
         tA = self.rl_sets[self.agent][-1]["front"].A
         tb = self.rl_sets[self.agent][-1]["front"].b
         opti.subject_to(tA @ front <= tb - shrink_tube)
-        # opti.subject_to(zF[3] == 0)
-        # opti.subject_to(zF[4] == 0)
 
-        # opti.subject_to(uF[0] == 0)
-        # opti.subject_to(uF[1] == 0)
+        opti.subject_to(zF[3] == 0)
+        opti.subject_to(zF[4] == 0)
+
+        opti.subject_to(uF[0] == 0)
+        opti.subject_to(uF[1] == 0)
 
         opti.minimize(J + (N * dt) ** 2)
 
@@ -563,7 +580,7 @@ class SingleVehiclePlanner(object):
 
         p_opts = {"expand": True}
         s_opts = {
-            "print_level": 5,
+            "print_level": self.verbose,
             "tol": 1e-2,
             "constr_viol_tol": 1e-2,
             # "max_iter": 300,
@@ -572,6 +589,7 @@ class SingleVehiclePlanner(object):
         }
         opti.solver("ipopt", p_opts, s_opts)
         sol = opti.solve()
+        print(sol.stats()["return_status"])
 
         x_opt = np.array(sol.value(x)).flatten()
         y_opt = np.array(sol.value(y)).flatten()
@@ -584,16 +602,24 @@ class SingleVehiclePlanner(object):
 
         result = VehiclePrediction()
 
-        result.t = t_interp * N * sol.value(dt)
-        result.x = np.append(x_opt, x_opt[-1])
-        result.y = np.append(y_opt, y_opt[-1])
-        result.psi = np.append(psi_opt, psi_opt[-1])
+        result.dt = sol.value(dt)
+        result.t = t_interp / zu0.t[-1] * N * sol.value(dt)
+        result.x = np.append(x_opt, sol.value(zF[0]))
+        result.y = np.append(y_opt, sol.value(zF[1]))
+        result.psi = np.append(psi_opt, sol.value(zF[2]))
 
-        result.v = np.append(v_opt, 0)
+        result.v = np.append(v_opt, sol.value(zF[3]))
+        result.u_steer = np.append(delta_opt, sol.value(zF[4]))
 
-        result.u_a = np.append(a_opt, 0)
-        result.u_steer = np.append(delta_opt, 0)
-        result.u_steer_dot = np.append(w_opt, 0)
+        result.u_a = np.append(a_opt, sol.value(uF[0]))
+        result.u_steer_dot = np.append(w_opt, sol.value(uF[1]))
+
+        result.l = [[None for _ in range(K + 1)] for _ in range(N)]
+        result.m = [[None for _ in range(K + 1)] for _ in range(N)]
+        for i in range(N):
+            for k in range(K + 1):
+                result.l[i][k] = np.array(sol.value(l[i][k]))
+                result.m[i][k] = np.array(sol.value(m[i][k]))
 
         self.get_interpolator(K=K, N=N, dt=sol.value(dt), opt=result)
 
@@ -762,8 +788,14 @@ def main():
     """
     main
     """
-    planner = SingleVehiclePlanner(rl_file_name="3v_rl_traj", agent="vehicle_1")
-    zu0 = planner.solve_ws(N=30, shrink_tube=0.8, spline_ws=True)
+    init_offset = VehicleState()
+    init_offset.x.x = 0.1
+    init_offset.x.y = 0.1
+    init_offset.e.psi = np.pi / 20
+    planner = SingleVehiclePlanner(
+        rl_file_name="3v_rl_traj", agent="vehicle_0", init_offset=init_offset
+    )
+    zu0 = planner.solve_ws(N=30, shrink_tube=0.8, spline_ws=False)
     # planner.plot_result(zu0, key_stride=30)
     l0, m0 = planner.dual_ws(zu0=zu0, obstacles=planner.obstacles)
     result = planner.solve(
