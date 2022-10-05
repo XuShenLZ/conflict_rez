@@ -17,7 +17,7 @@ from confrez.vehicle_types import VehicleBody
 COLORS = {
     "vehicle_0": {"front": (255, 119, 0), "back": (128, 60, 0)},
     "vehicle_1": {"front": (0, 255, 212), "back": (0, 140, 117)},
-    "vehicle_2": {"front": (255, 255, 255), "back": (128, 128, 128)},
+    "vehicle_2": {"front": (164, 164, 164), "back": (64, 64, 64)},
     "vehicle_3": {"front": (255, 0, 149), "back": (128, 0, 74)},
 }
 
@@ -28,8 +28,6 @@ def compute_sets(file_name: str, L=2.5) -> Dict[str, List[Dict[str, Polytope]]]:
     """
     with open(file_name + ".pkl", "rb") as f:
         rl_states_history = pickle.load(f)
-
-    print(rl_states_history)
 
     V = [[0, 0], [0, L], [L, 0], [L, L]]
 
@@ -346,8 +344,8 @@ def main():
 
     plt.figure()
     for x, y in product(range(14), repeat=2):
-        plt.axhline(y=y * 2.5, xmin=0, xmax=13 * 2.5)
-        plt.axvline(x=x * 2.5, ymin=0, ymax=13 * 2.5)
+        plt.axhline(y=y * 2.5, xmin=0, xmax=13 * 2.5, color="k", linewidth=0.5)
+        plt.axvline(x=x * 2.5, ymin=0, ymax=13 * 2.5, color="k", linewidth=0.5)
     ax = plt.gca()
     for p in obstacles:
         p.plot(ax, facecolor="b")
@@ -363,6 +361,8 @@ def main():
     for agent in rl_sets:
         for i, body_sets in enumerate(rl_sets[agent]):
             ax = plt.subplot(nrow, ncol, i + 1)
+            for p in obstacles:
+                p.plot(ax, facecolor="b")
             body_sets["front"].plot(
                 ax,
                 alpha=0.5,
@@ -373,8 +373,8 @@ def main():
                 alpha=0.5,
                 facecolor=tuple(map(lambda x: x / 255.0, COLORS[agent]["back"])),
             )
-            ax.set_xlim(xmin=-2.5, xmax=15 * 2.5)
-            ax.set_ylim(ymin=-2.5, ymax=15 * 2.5)
+            ax.set_xlim(xmin=0, xmax=13 * 2.5)
+            ax.set_ylim(ymin=3 * 2.5, ymax=11 * 2.5)
             ax.set_aspect("equal")
 
     plt.figure()

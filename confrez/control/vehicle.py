@@ -1,58 +1,55 @@
 from math import ceil
-from typing import List, Tuple
-import casadi as ca
+from typing import Dict, Tuple
 import numpy as np
-from pytope import Polytope
+import casadi as ca
 
 from scipy.interpolate import interp1d
-from confrez.control.utils import plot_car
-from confrez.obstacle_types import GeofenceRegion
+import matplotlib.pyplot as plt
 
-from confrez.pytypes import VehiclePrediction, VehicleState
-from confrez.vehicle_types import VehicleBody, VehicleConfig
-from confrez.control.dynamic_model import kinematic_bicycle_ct
+from pytope import Polytope
 from confrez.control.compute_sets import (
     compute_initial_states,
     compute_obstacles,
     compute_sets,
     interp_along_sets,
 )
+from confrez.control.dynamic_model import kinematic_bicycle_ct
+from confrez.control.utils import rot_mat_2d
+from confrez.obstacle_types import GeofenceRegion
 
-import matplotlib.pyplot as plt
+from confrez.pytypes import VehiclePrediction, VehicleState
+from confrez.vehicle_types import VehicleBody, VehicleConfig
 
 
-class SingleVehiclePlanner(object):
+class Vehicle(object):
     """
-    Planner for conflict resolution
+    Single vehicle class containing the optimization variables and constraints formulation
     """
 
     def __init__(
         self,
-        rl_file_name: str = "1v_rl_traj",
-        agent: str = "vehicle_0",
-        init_offset: VehicleState = VehicleState(),
-        vehicle_body: VehicleBody = VehicleBody(),
+        rl_file_name: str,
+        agent: str,
+        color: Dict[str, Tuple[float, float, float]],
         vehicle_config: VehicleConfig = VehicleConfig(),
+        vehicle_body: VehicleBody = VehicleBody(),
         region: GeofenceRegion = GeofenceRegion(),
-        verbose: int = 5,
     ) -> None:
-        """
-        `vehicle_body`: VehicleBody object
-        `vehicle_config`: VehicleConfig object
-        """
         self.rl_file_name = rl_file_name
-        self.vehicle_body = vehicle_body
-        self.vehicle_config = vehicle_config
-        self.region = region
-        self.verbose = verbose
-        self.init_offset = init_offset
-
-        self.rl_sets = compute_sets(rl_file_name)
-        self.init_states = compute_initial_states(rl_file_name, vehicle_body)
-        self.obstacles = compute_obstacles()
-
         self.agent = agent
-        self.num_sets = len(self.rl_sets[self.agent])
+        self.color = color
+
+        self.vehicle_config = vehicle_config
+        self.vehicle_body = vehicle_body
+        self.region = region
+
+        self.init_state = compute_initial_states(self.rl_file_name, self.vehicle_body)[
+            self.agent
+        ]
+        self.obstacles = compute_obstacles()
+        self.rl_tube = compute_sets(self.rl_file_name)[self.agent]
+
+        self.num_sets = len(self.rl_tube)
 
     def collocation_coefficients(
         self, K: int
@@ -103,10 +100,12 @@ class SingleVehiclePlanner(object):
         self,
         N: int = 30,
         dt: float = 0.1,
+        init_offset: VehicleState = VehicleState(),
         bounded_input: bool = False,
         shrink_tube: float = 0.8,
         spline_ws: bool = False,
-    ):
+        verbose: int = 0,
+    ) -> VehiclePrediction:
         """
         setup the warm start optimization problem
         """
@@ -128,11 +127,9 @@ class SingleVehiclePlanner(object):
 
         J = 0
 
-        opti.subject_to(x[0] == self.init_states[self.agent].x.x + self.init_offset.x.x)
-        opti.subject_to(y[0] == self.init_states[self.agent].x.y + self.init_offset.x.y)
-        opti.subject_to(
-            psi[0] == self.init_states[self.agent].e.psi + self.init_offset.e.psi
-        )
+        opti.subject_to(x[0] == self.init_state.x.x + init_offset.x.x)
+        opti.subject_to(y[0] == self.init_state.x.y + init_offset.x.y)
+        opti.subject_to(psi[0] == self.init_state.e.psi + init_offset.e.psi)
         opti.subject_to(v[0] == 0)
         opti.subject_to(delta[0] == 0)
 
@@ -181,16 +178,16 @@ class SingleVehiclePlanner(object):
             k = N * i
 
             back = ca.vertcat(x[k], y[k])
-            A = self.rl_sets[self.agent][i]["back"].A
-            b = self.rl_sets[self.agent][i]["back"].b
+            A = self.rl_tube[i]["back"].A
+            b = self.rl_tube[i]["back"].b
             opti.subject_to(A @ back <= b - shrink_tube)
 
             front = ca.vertcat(
                 x[k] + self.vehicle_body.wb * ca.cos(psi[k]),
                 y[k] + self.vehicle_body.wb * ca.sin(psi[k]),
             )
-            A = self.rl_sets[self.agent][i]["front"].A
-            b = self.rl_sets[self.agent][i]["front"].b
+            A = self.rl_tube[i]["front"].A
+            b = self.rl_tube[i]["front"].b
             opti.subject_to(A @ front <= b - shrink_tube)
 
         opti.minimize(J)
@@ -205,7 +202,7 @@ class SingleVehiclePlanner(object):
 
         p_opts = {"expand": True}
         s_opts = {
-            "print_level": self.verbose,
+            "print_level": verbose,
             "tol": 1e-2,
             "constr_viol_tol": 1e-2,
             "max_iter": 500,
@@ -229,22 +226,18 @@ class SingleVehiclePlanner(object):
 
         return result
 
-    def dual_ws(
-        self, zu0: VehiclePrediction, obstacles: List[Polytope]
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    def dual_ws(self, zu0: VehiclePrediction, verbose: int = 0) -> VehiclePrediction:
         """
         Warm start the dual variables
         `zu0`: VehiclePrediction object including the state-input warm start
-        `obstacles`: List of pytope Polytope objects
-        return: warm starting solution of l and m
         """
         print("Solving Dual WS Problem...")
         N = len(zu0.x)
 
-        n_obs = len(obstacles)
+        n_obs = len(self.obstacles)
 
         n_hps = []
-        for obs in obstacles:
+        for obs in self.obstacles:
             n_hps.append(len(obs.b))
 
         veh_G = self.vehicle_body.A
@@ -270,7 +263,7 @@ class SingleVehiclePlanner(object):
                 ]
             )
 
-            for j, obs in enumerate(obstacles):
+            for j, obs in enumerate(self.obstacles):
                 idx0 = sum(n_hps[:j])
                 idx1 = sum(n_hps[: j + 1])
                 lj = l[idx0:idx1, k]
@@ -287,44 +280,27 @@ class SingleVehiclePlanner(object):
         opti.minimize(obj)
 
         p_opts = {"expand": True}
-        s_opts = {"print_level": self.verbose}
+        s_opts = {"print_level": verbose}
         opti.solver("ipopt", p_opts, s_opts)
 
         sol = opti.solve()
         print(sol.stats()["return_status"])
 
-        return sol.value(l), sol.value(m)
+        zu0.l = sol.value(l)
+        zu0.m = sol.value(m)
 
-    def solve(
+        return zu0
+
+    def interp_ws_for_collocation(
         self,
         zu0: VehiclePrediction,
-        l0: np.ndarray,
-        m0: np.ndarray,
-        obstacles: List[Polytope],
         K: int = 5,
         N_per_set: int = 5,
-        shrink_tube: float = 0.8,
-        bound_dt: bool = False,
-        dt_min: float = 0.001,
-        dt_max: float = 0.5,
-        dmin: float = 0.05,
-    ) -> VehiclePrediction:
+    ):
         """
-        `zu0`: state-input warm start
-        `N_per_set`: number of intervals to arrive at each rl set
-        `K`: order of collocation polynomial
-        Return: VehiclePrediction object for states and inputs
+        interpolate warm-starting solution with normal timestamps into collocation format
+        `zu0`: vehicle initial guess with states, inputs, and dual multipliers
         """
-        print("Solving main opt...")
-        n_obs = len(obstacles)
-
-        n_hps = []
-        for obs in obstacles:
-            n_hps.append(len(obs.b))
-
-        veh_G = self.vehicle_body.A
-        veh_g = self.vehicle_body.b
-
         # Interpolate for collocation
         fx0 = interp1d(zu0.t, zu0.x)
         fy0 = interp1d(zu0.t, zu0.y)
@@ -335,8 +311,8 @@ class SingleVehiclePlanner(object):
         fa0 = interp1d(zu0.t, zu0.u_a)
         fw0 = interp1d(zu0.t, zu0.u_steer_dot)
 
-        fl0 = interp1d(zu0.t, l0, axis=1)
-        fm0 = interp1d(zu0.t, m0, axis=1)
+        fl0 = interp1d(zu0.t, zu0.l, axis=1)
+        fm0 = interp1d(zu0.t, zu0.m, axis=1)
 
         # Collocation intervals
         N = N_per_set * (self.num_sets - 1)
@@ -350,139 +326,182 @@ class SingleVehiclePlanner(object):
         t_interp = np.append(t_interp, N)
         t_interp = t_interp / N * zu0.t[-1]
 
-        # Interpolated states, input, and dual variables at collocation points
-        x_interp = fx0(t_interp)
-        y_interp = fy0(t_interp)
-        psi_interp = fpsi0(t_interp)
-        v_interp = fv0(t_interp)
-        delta_interp = fdelta0(t_interp)
+        output = VehiclePrediction()
 
-        a_interp = fa0(t_interp)
-        w_interp = fw0(t_interp)
+        # Interpolated states, input, and dual variables at collocation points
+        output.t = t_interp
+        output.x = fx0(t_interp)
+        output.y = fy0(t_interp)
+        output.psi = fpsi0(t_interp)
+        output.v = fv0(t_interp)
+        output.u_steer = fdelta0(t_interp)
+
+        output.u_a = fa0(t_interp)
+        output.u_steer_dot = fw0(t_interp)
 
         l_interp = fl0(t_interp)
         m_interp = fm0(t_interp)
 
-        x0 = x_interp[:-1].reshape(N, K + 1)
-        y0 = y_interp[:-1].reshape(N, K + 1)
-        psi0 = psi_interp[:-1].reshape(N, K + 1)
-        v0 = v_interp[:-1].reshape(N, K + 1)
-        delta0 = delta_interp[:-1].reshape(N, K + 1)
-
-        a0 = a_interp[:-1].reshape(N, K + 1)
-        w0 = w_interp[:-1].reshape(N, K + 1)
-
-        # l0 = l_interp[:, :-1].T.reshape(N, K + 1, -1)
-        # m0 = m_interp[:, :-1].T.reshape(N, K + 1, -1)
-        l0 = [[None for _ in range(K + 1)] for _ in range(N)]
-        m0 = [[None for _ in range(K + 1)] for _ in range(N)]
+        output.l = [[None for _ in range(K + 1)] for _ in range(N)]
+        output.m = [[None for _ in range(K + 1)] for _ in range(N)]
         j = 0
         for i in range(N):
             for k in range(K + 1):
-                l0[i][k] = l_interp[:, j]
-                m0[i][k] = m_interp[:, j]
+                output.l[i][k] = l_interp[:, j]
+                output.m[i][k] = m_interp[:, j]
                 j += 1
 
-        # Initial guess for time step
-        dt0 = zu0.t[-1] / N
+        return output
+
+    def setup_single_final_problem(
+        self,
+        zu0: VehiclePrediction,
+        init_offset: VehicleState = VehicleState(),
+        opti: ca.Opti = None,
+        dt: ca.Opti.variable = None,
+        K: int = 5,
+        N_per_set: int = 5,
+        dmin: float = 0.05,
+        shrink_tube: float = 0.8,
+    ):
+        """
+        setup the final problem of a single vehicle
+        `zu0`: initial guess for states, inputs, and dual multipliers at collocation points. If the initial guess was not solved with collocation, it is necessary to call `self.interp_ws_for_collocation()` first
+        """
+        if opti is None:
+            self.opti = ca.Opti()
+        else:
+            self.opti = opti
+
+        N = N_per_set * (self.num_sets - 1)
+        self.N = N
+        self.K = K
+
+        if dt is None:
+            self.dt = self.opti.variable()
+            # Initial guess for time step
+            dt0 = zu0.t[-1] / N
+            self.opti.set_initial(self.dt, dt0)
+        else:
+            self.dt = dt
+
+        n_obs = len(self.obstacles)
+
+        n_hps = []
+        for obs in self.obstacles:
+            n_hps.append(len(obs.b))
+
+        veh_G = self.vehicle_body.A
+        veh_g = self.vehicle_body.b
+
+        self.x = self.opti.variable(N, K + 1)
+        self.y = self.opti.variable(N, K + 1)
+        self.psi = self.opti.variable(N, K + 1)
+        self.v = self.opti.variable(N, K + 1)
+        self.delta = self.opti.variable(N, K + 1)
+
+        self.a = self.opti.variable(N, K + 1)
+        self.w = self.opti.variable(N, K + 1)
+
+        self.l = [
+            [self.opti.variable(sum(n_hps)) for _ in range(K + 1)] for _ in range(N)
+        ]
+        self.m = [
+            [self.opti.variable(4 * n_obs) for _ in range(K + 1)] for _ in range(N)
+        ]
+
+        self.J = 0
 
         A, B, D = self.collocation_coefficients(K=K)
 
         f_ct = kinematic_bicycle_ct(vehicle_body=self.vehicle_body)
 
-        opti = ca.Opti()
-
-        x = opti.variable(N, K + 1)
-        y = opti.variable(N, K + 1)
-        psi = opti.variable(N, K + 1)
-        v = opti.variable(N, K + 1)
-        delta = opti.variable(N, K + 1)
-
-        dt = opti.variable()
-
-        a = opti.variable(N, K + 1)
-        w = opti.variable(N, K + 1)
-
-        l = [[opti.variable(sum(n_hps)) for _ in range(K + 1)] for _ in range(N)]
-        m = [[opti.variable(4 * n_obs) for _ in range(K + 1)] for _ in range(N)]
-
-        J = 0
-
-        opti.subject_to(
-            x[0, 0] == self.init_states[self.agent].x.x + self.init_offset.x.x
-        )
-        opti.subject_to(
-            y[0, 0] == self.init_states[self.agent].x.y + self.init_offset.x.y
-        )
-        opti.subject_to(
-            psi[0, 0] == self.init_states[self.agent].e.psi + +self.init_offset.e.psi
+        self.opti.subject_to(self.x[0, 0] == self.init_state.x.x + init_offset.x.x)
+        self.opti.subject_to(self.y[0, 0] == self.init_state.x.y + init_offset.x.y)
+        self.opti.subject_to(
+            self.psi[0, 0] == self.init_state.e.psi + init_offset.e.psi
         )
 
-        opti.subject_to(v[0, 0] == 0)
-        opti.subject_to(delta[0, 0] == 0)
+        self.opti.subject_to(self.v[0, 0] == 0)
+        self.opti.subject_to(self.delta[0, 0] == 0)
 
-        opti.subject_to(a[0, 0] == 0)
-        opti.subject_to(w[0, 0] == 0)
-
-        if bound_dt:
-            opti.subject_to(opti.bounded(dt_min, dt, dt_max))
+        self.opti.subject_to(self.a[0, 0] == 0)
+        self.opti.subject_to(self.w[0, 0] == 0)
 
         for i in range(N):
             for k in range(K + 1):
                 # collocation point variables
-                opti.subject_to(
-                    opti.bounded(self.region.x_min, x[i, k], self.region.x_max)
-                )
-                opti.subject_to(
-                    opti.bounded(self.region.y_min, y[i, k], self.region.y_max)
-                )
-
-                opti.subject_to(
-                    opti.bounded(
-                        self.vehicle_config.v_min, v[i, k], self.vehicle_config.v_max
+                self.opti.subject_to(
+                    self.opti.bounded(
+                        self.region.x_min, self.x[i, k], self.region.x_max
                     )
                 )
-                opti.subject_to(
-                    opti.bounded(
+                self.opti.subject_to(
+                    self.opti.bounded(
+                        self.region.y_min, self.y[i, k], self.region.y_max
+                    )
+                )
+
+                self.opti.subject_to(
+                    self.opti.bounded(
+                        self.vehicle_config.v_min,
+                        self.v[i, k],
+                        self.vehicle_config.v_max,
+                    )
+                )
+                self.opti.subject_to(
+                    self.opti.bounded(
                         self.vehicle_config.delta_min,
-                        delta[i, k],
+                        self.delta[i, k],
                         self.vehicle_config.delta_max,
                     )
                 )
 
-                opti.subject_to(
-                    opti.bounded(
-                        self.vehicle_config.a_min, a[i, k], self.vehicle_config.a_max
+                self.opti.subject_to(
+                    self.opti.bounded(
+                        self.vehicle_config.a_min,
+                        self.a[i, k],
+                        self.vehicle_config.a_max,
                     )
                 )
-                opti.subject_to(
-                    opti.bounded(
+                self.opti.subject_to(
+                    self.opti.bounded(
                         self.vehicle_config.w_delta_min,
-                        w[i, k],
+                        self.w[i, k],
                         self.vehicle_config.w_delta_max,
                     )
                 )
 
-                # Dual multipliers. Note here that the l and m are lists of opti.variable
-                opti.subject_to(l[i][k] >= 0)
-                # opti.set_initial(l[i][k], l_interp[:, i * K + k])
-                opti.set_initial(l[i][k], l0[i][k])
+                # Dual multipliers. Note here that the l and m are lists of self.opti.variable
+                self.opti.subject_to(self.l[i][k] >= 0)
+                self.opti.set_initial(self.l[i][k], zu0.l[i][k])
 
-                opti.subject_to(m[i][k] >= 0)
-                # opti.set_initial(m[i][k], m_interp[:, i * K + k])
-                opti.set_initial(m[i][k], m0[i][k])
+                self.opti.subject_to(self.m[i][k] >= 0)
+                self.opti.set_initial(self.m[i][k], zu0.m[i][k])
 
                 # Collocation constraints
-                state = ca.vertcat(x[i, k], y[i, k], psi[i, k], v[i, k], delta[i, k])
-                input = ca.vertcat(a[i, k], w[i, k])
+                state = ca.vertcat(
+                    self.x[i, k],
+                    self.y[i, k],
+                    self.psi[i, k],
+                    self.v[i, k],
+                    self.delta[i, k],
+                )
+                input = ca.vertcat(self.a[i, k], self.w[i, k])
                 func_ode = f_ct(state, input)
                 poly_ode = 0
 
                 for j in range(K + 1):
-                    zij = ca.vertcat(x[i, j], y[i, j], psi[i, j], v[i, j], delta[i, j])
-                    poly_ode += A[j, k] * zij / dt
+                    zij = ca.vertcat(
+                        self.x[i, j],
+                        self.y[i, j],
+                        self.psi[i, j],
+                        self.v[i, j],
+                        self.delta[i, j],
+                    )
+                    poly_ode += A[j, k] * zij / self.dt
 
-                opti.subject_to(poly_ode == func_ode)
+                self.opti.subject_to(poly_ode == func_ode)
 
                 # Cost
                 error = (
@@ -490,29 +509,31 @@ class SingleVehiclePlanner(object):
                     # + (x[i, k] - x_interp[i * K + k]) ** 2
                     # + (y[i, k] - y_interp[i * K + k]) ** 2
                     # + (psi[i, k] - psi_interp[i * K + k]) ** 2
-                    + a[i, k] ** 2
-                    + (v[i, k] ** 2) * (w[i, k] ** 2)
-                    + delta[i, k] ** 2
+                    + self.a[i, k] ** 2
+                    + (self.v[i, k] ** 2) * (self.w[i, k] ** 2)
+                    + self.delta[i, k] ** 2
                 )
-                J += B[k] * error * dt
+                self.J += B[k] * error * self.dt
 
                 # OBCA constraints
-                t = ca.vertcat(x[i, k], y[i, k])
+                t = ca.vertcat(self.x[i, k], self.y[i, k])
                 R = ca.vertcat(
-                    ca.horzcat(ca.cos(psi[i, k]), -ca.sin(psi[i, k])),
-                    ca.horzcat(ca.sin(psi[i, k]), ca.cos(psi[i, k])),
+                    ca.horzcat(ca.cos(self.psi[i, k]), -ca.sin(self.psi[i, k])),
+                    ca.horzcat(ca.sin(self.psi[i, k]), ca.cos(self.psi[i, k])),
                 )
-                for j, obs in enumerate(obstacles):
+                for j, obs in enumerate(self.obstacles):
                     idx0 = sum(n_hps[:j])
                     idx1 = sum(n_hps[: j + 1])
-                    lj = l[i][k][idx0:idx1]
-                    mj = m[i][k][4 * j : 4 * (j + 1)]
+                    lj = self.l[i][k][idx0:idx1]
+                    mj = self.m[i][k][4 * j : 4 * (j + 1)]
 
-                    opti.subject_to(
+                    self.opti.subject_to(
                         ca.dot(-veh_g, mj) + ca.dot((obs.A @ t - obs.b), lj) >= dmin
                     )
-                    opti.subject_to(veh_G.T @ mj + R.T @ obs.A.T @ lj == np.zeros(2))
-                    opti.subject_to(ca.dot(obs.A.T @ lj, obs.A.T @ lj) == 1)
+                    self.opti.subject_to(
+                        veh_G.T @ mj + R.T @ obs.A.T @ lj == np.zeros(2)
+                    )
+                    self.opti.subject_to(ca.dot(obs.A.T @ lj, obs.A.T @ lj) == 1)
 
             # Continuity constraints
             if i >= 1:
@@ -520,138 +541,161 @@ class SingleVehiclePlanner(object):
                 input_prev = 0
                 for j in range(K + 1):
                     zimj = ca.vertcat(
-                        x[i - 1, j],
-                        y[i - 1, j],
-                        psi[i - 1, j],
-                        v[i - 1, j],
-                        delta[i - 1, j],
+                        self.x[i - 1, j],
+                        self.y[i - 1, j],
+                        self.psi[i - 1, j],
+                        self.v[i - 1, j],
+                        self.delta[i - 1, j],
                     )
-                    uimj = ca.vertcat(a[i - 1, j], w[i - 1, j])
+                    uimj = ca.vertcat(self.a[i - 1, j], self.w[i - 1, j])
                     poly_prev += D[j] * zimj
                     input_prev += D[j] * uimj
 
-                zi0 = ca.vertcat(x[i, 0], y[i, 0], psi[i, 0], v[i, 0], delta[i, 0])
-                ui0 = ca.vertcat(a[i, 0], w[i, 0])
-                opti.subject_to(poly_prev == zi0)
-                opti.subject_to(input_prev == ui0)
+                zi0 = ca.vertcat(
+                    self.x[i, 0],
+                    self.y[i, 0],
+                    self.psi[i, 0],
+                    self.v[i, 0],
+                    self.delta[i, 0],
+                )
+                ui0 = ca.vertcat(self.a[i, 0], self.w[i, 0])
+                self.opti.subject_to(poly_prev == zi0)
+                self.opti.subject_to(input_prev == ui0)
 
                 # RL set constraints
                 q, r = divmod(i, N_per_set)
                 if r == 0 and i > 0:
-                    back = ca.vertcat(x[i, 0], y[i, 0])
-                    tA = self.rl_sets[self.agent][q]["back"].A
-                    tb = self.rl_sets[self.agent][q]["back"].b
-                    opti.subject_to(tA @ back <= tb - shrink_tube)
+                    back = ca.vertcat(self.x[i, 0], self.y[i, 0])
+                    tA = self.rl_tube[q]["back"].A
+                    tb = self.rl_tube[q]["back"].b
+                    self.opti.subject_to(tA @ back <= tb - shrink_tube)
 
                     front = ca.vertcat(
-                        x[i, 0] + self.vehicle_body.wb * ca.cos(psi[i, 0]),
-                        y[i, 0] + self.vehicle_body.wb * ca.sin(psi[i, 0]),
+                        self.x[i, 0] + self.vehicle_body.wb * ca.cos(self.psi[i, 0]),
+                        self.y[i, 0] + self.vehicle_body.wb * ca.sin(self.psi[i, 0]),
                     )
-                    tA = self.rl_sets[self.agent][q]["front"].A
-                    tb = self.rl_sets[self.agent][q]["front"].b
-                    opti.subject_to(tA @ front <= tb - shrink_tube)
+                    tA = self.rl_tube[q]["front"].A
+                    tb = self.rl_tube[q]["front"].b
+                    self.opti.subject_to(tA @ front <= tb - shrink_tube)
 
         # Final constraints
-        zF = 0
-        uF = 0
+        self.zF = 0
+        self.uF = 0
         for j in range(K + 1):
             zimj = ca.vertcat(
-                x[N - 1, j], y[N - 1, j], psi[N - 1, j], v[N - 1, j], delta[N - 1, j]
+                self.x[N - 1, j],
+                self.y[N - 1, j],
+                self.psi[N - 1, j],
+                self.v[N - 1, j],
+                self.delta[N - 1, j],
             )
-            uimj = ca.vertcat(a[N - 1, j], w[N - 1, j])
-            zF += D[j] * zimj
-            uF += D[j] * uimj
+            uimj = ca.vertcat(self.a[N - 1, j], self.w[N - 1, j])
+            self.zF += D[j] * zimj
+            self.uF += D[j] * uimj
 
-        # opti.subject_to(zF[0] == x_interp[-1])
-        # opti.subject_to(zF[1] == y_interp[-1])
-        # opti.subject_to(zF[2] == psi_interp[-1])
+        # self.opti.subject_to(self.zF[0] == x_interp[-1])
+        # self.opti.subject_to(self.zF[1] == y_interp[-1])
+        # self.opti.subject_to(self.zF[2] == psi_interp[-1])
 
         # RL set constraints
-        back = ca.vertcat(zF[0], zF[1])
-        tA = self.rl_sets[self.agent][-1]["back"].A
-        tb = self.rl_sets[self.agent][-1]["back"].b
-        opti.subject_to(tA @ back <= tb - shrink_tube)
+        back = ca.vertcat(self.zF[0], self.zF[1])
+        tA = self.rl_tube[-1]["back"].A
+        tb = self.rl_tube[-1]["back"].b
+        self.opti.subject_to(tA @ back <= tb - shrink_tube)
 
         front = ca.vertcat(
-            zF[0] + self.vehicle_body.wb * ca.cos(zF[2]),
-            zF[1] + self.vehicle_body.wb * ca.sin(zF[2]),
+            self.zF[0] + self.vehicle_body.wb * ca.cos(self.zF[2]),
+            self.zF[1] + self.vehicle_body.wb * ca.sin(self.zF[2]),
         )
-        tA = self.rl_sets[self.agent][-1]["front"].A
-        tb = self.rl_sets[self.agent][-1]["front"].b
-        opti.subject_to(tA @ front <= tb - shrink_tube)
+        tA = self.rl_tube[-1]["front"].A
+        tb = self.rl_tube[-1]["front"].b
+        self.opti.subject_to(tA @ front <= tb - shrink_tube)
 
-        opti.subject_to(zF[3] == 0)
-        opti.subject_to(zF[4] == 0)
+        self.opti.subject_to(self.zF[3] == 0)
+        self.opti.subject_to(self.zF[4] == 0)
 
-        opti.subject_to(uF[0] == 0)
-        opti.subject_to(uF[1] == 0)
-
-        opti.minimize(J + (N * dt) ** 2)
+        self.opti.subject_to(self.uF[0] == 0)
+        self.opti.subject_to(self.uF[1] == 0)
 
         # Initial guess
-        # opti.set_initial(x, np.array(x_interp[:-1]).reshape(N, K + 1))
-        # opti.set_initial(y, np.array(y_interp[:-1]).reshape(N, K + 1))
-        # opti.set_initial(psi, np.array(psi_interp[:-1]).reshape(N, K + 1))
-        # opti.set_initial(v, np.array(v_interp[:-1]).reshape(N, K + 1))
-        # opti.set_initial(delta, np.array(delta_interp[:-1]).reshape(N, K + 1))
+        self.opti.set_initial(self.x, zu0.x[:-1].reshape(N, K + 1))
+        self.opti.set_initial(self.y, zu0.y[:-1].reshape(N, K + 1))
+        self.opti.set_initial(self.psi, zu0.psi[:-1].reshape(N, K + 1))
+        self.opti.set_initial(self.v, zu0.v[:-1].reshape(N, K + 1))
+        self.opti.set_initial(self.delta, zu0.u_steer[:-1].reshape(N, K + 1))
 
-        # opti.set_initial(a, np.array(a_interp[:-1]).reshape(N, K + 1))
-        # opti.set_initial(w, np.array(w_interp[:-1]).reshape(N, K + 1))
-        opti.set_initial(x, x0)
-        opti.set_initial(y, y0)
-        opti.set_initial(psi, psi0)
-        opti.set_initial(v, v0)
-        opti.set_initial(delta, delta0)
+        self.opti.set_initial(self.a, zu0.u_a[:-1].reshape(N, K + 1))
+        self.opti.set_initial(self.w, zu0.u_steer_dot[:-1].reshape(N, K + 1))
 
-        opti.set_initial(a, a0)
-        opti.set_initial(w, w0)
+        self.J += (N * self.dt) ** 2
 
-        opti.set_initial(dt, dt0)
+        return self.opti
 
+    def solve_single_final_problem(self, verbose: int = 0):
+        """
+        solve the trajectory of single vehicle problem
+        """
+        print("Solving single vehicle final trajectory...")
+        self.opti.minimize(self.J)
         p_opts = {"expand": True}
         s_opts = {
-            "print_level": self.verbose,
+            "print_level": verbose,
             "tol": 1e-2,
             "constr_viol_tol": 1e-2,
             # "max_iter": 300,
             # "mumps_mem_percent": 64000,
             "linear_solver": "ma97",
         }
-        opti.solver("ipopt", p_opts, s_opts)
-        sol = opti.solve()
+        self.opti.solver("ipopt", p_opts, s_opts)
+        sol = self.opti.solve()
         print(sol.stats()["return_status"])
 
-        x_opt = np.array(sol.value(x)).flatten()
-        y_opt = np.array(sol.value(y)).flatten()
-        psi_opt = np.array(sol.value(psi)).flatten()
-        v_opt = np.array(sol.value(v)).flatten()
-        delta_opt = np.array(sol.value(delta)).flatten()
+        return sol
 
-        a_opt = np.array(sol.value(a)).flatten()
-        w_opt = np.array(sol.value(w)).flatten()
+    def get_solution(self, sol: ca.OptiSol) -> VehiclePrediction:
+        """
+        get solution of this vehicle
+        """
+
+        x_opt = np.array(sol.value(self.x)).flatten()
+        y_opt = np.array(sol.value(self.y)).flatten()
+        psi_opt = np.array(sol.value(self.psi)).flatten()
+        v_opt = np.array(sol.value(self.v)).flatten()
+        delta_opt = np.array(sol.value(self.delta)).flatten()
+
+        a_opt = np.array(sol.value(self.a)).flatten()
+        w_opt = np.array(sol.value(self.w)).flatten()
 
         result = VehiclePrediction()
 
-        result.dt = sol.value(dt)
-        result.t = t_interp / zu0.t[-1] * N * sol.value(dt)
-        result.x = np.append(x_opt, sol.value(zF[0]))
-        result.y = np.append(y_opt, sol.value(zF[1]))
-        result.psi = np.append(psi_opt, sol.value(zF[2]))
+        result.dt = sol.value(self.dt)
 
-        result.v = np.append(v_opt, sol.value(zF[3]))
-        result.u_steer = np.append(delta_opt, sol.value(zF[4]))
+        # Collocation time steps
+        tau_root = np.append(0, ca.collocation_points(self.K, "radau"))
+        t_collo = np.array([])
+        for i in range(self.N):
+            t_collo = np.append(t_collo, i + tau_root)
+        t_collo = np.append(t_collo, self.N)
+        result.t = t_collo * sol.value(self.dt)
 
-        result.u_a = np.append(a_opt, sol.value(uF[0]))
-        result.u_steer_dot = np.append(w_opt, sol.value(uF[1]))
+        result.x = np.append(x_opt, sol.value(self.zF[0]))
+        result.y = np.append(y_opt, sol.value(self.zF[1]))
+        result.psi = np.append(psi_opt, sol.value(self.zF[2]))
 
-        result.l = [[None for _ in range(K + 1)] for _ in range(N)]
-        result.m = [[None for _ in range(K + 1)] for _ in range(N)]
-        for i in range(N):
-            for k in range(K + 1):
-                result.l[i][k] = np.array(sol.value(l[i][k]))
-                result.m[i][k] = np.array(sol.value(m[i][k]))
+        result.v = np.append(v_opt, sol.value(self.zF[3]))
+        result.u_steer = np.append(delta_opt, sol.value(self.zF[4]))
 
-        self.get_interpolator(K=K, N=N, dt=sol.value(dt), opt=result)
+        result.u_a = np.append(a_opt, sol.value(self.uF[0]))
+        result.u_steer_dot = np.append(w_opt, sol.value(self.uF[1]))
+
+        result.l = [[None for _ in range(self.K + 1)] for _ in range(self.N)]
+        result.m = [[None for _ in range(self.K + 1)] for _ in range(self.N)]
+        for i in range(self.N):
+            for k in range(self.K + 1):
+                result.l[i][k] = np.array(sol.value(self.l[i][k]))
+                result.m[i][k] = np.array(sol.value(self.m[i][k]))
+
+        self.get_interpolator(K=self.K, N=self.N, dt=sol.value(self.dt), opt=result)
 
         return result
 
@@ -764,6 +808,23 @@ class SingleVehiclePlanner(object):
 
         return result
 
+    def plot_car(self, x: float, y: float, yaw: float, vehicle_body: VehicleBody):
+        car_color = "-k"
+        rot = rot_mat_2d(-yaw)
+        car_outline_x, car_outline_y = [], []
+        for rx, ry in zip(vehicle_body.xy[:, 0], vehicle_body.xy[:, 1]):
+            converted_xy = np.stack([rx, ry]).T @ rot
+            car_outline_x.append(converted_xy[0] + x)
+            car_outline_y.append(converted_xy[1] + y)
+
+        plt.plot(car_outline_x, car_outline_y, car_color)
+        plt.plot(
+            [x, x + np.cos(yaw) * vehicle_body.wb],
+            [y, y + np.sin(yaw) * vehicle_body.wb],
+            "kD",
+            markersize=2.5,
+        )
+
     def plot_result(self, result: VehiclePrediction, key_stride: int = 6):
         """
         plot the sets and result
@@ -772,14 +833,14 @@ class SingleVehiclePlanner(object):
         ax = plt.subplot(1, 2, 1)
         for obstacle in self.obstacles:
             obstacle.plot(ax, facecolor="b", alpha=0.5)
-        for body_sets in self.rl_sets[self.agent]:
-            body_sets["front"].plot(ax, facecolor="g", alpha=0.5)
-            body_sets["back"].plot(ax, facecolor="r", alpha=0.5)
+        for body_sets in self.rl_tube:
+            body_sets["front"].plot(ax, facecolor=self.color["front"], alpha=0.5)
+            body_sets["back"].plot(ax, facecolor=self.color["back"], alpha=0.5)
 
         for i in range(self.num_sets):
             k = key_stride * i
 
-            plot_car(result.x[k], result.y[k], result.psi[k], self.vehicle_body)
+            self.plot_car(result.x[k], result.y[k], result.psi[k], self.vehicle_body)
 
         ax.plot(result.x, result.y)
         ax.set_aspect("equal")
@@ -799,13 +860,13 @@ class SingleVehiclePlanner(object):
         ncol = 4
         nrow = ceil(self.num_sets / ncol)
         plt.figure(figsize=(2.5 * ncol, 2.5 * nrow))
-        for i, body_sets in enumerate(self.rl_sets[self.agent]):
+        for i, body_sets in enumerate(self.rl_tube):
             ax = plt.subplot(nrow, ncol, i + 1)
-            body_sets["front"].plot(ax, facecolor="g", alpha=0.5)
-            body_sets["back"].plot(ax, facecolor="r", alpha=0.5)
+            body_sets["front"].plot(ax, facecolor=self.color["front"], alpha=0.5)
+            body_sets["back"].plot(ax, facecolor=self.color["back"], alpha=0.5)
 
             k = key_stride * i
-            plot_car(result.x[k], result.y[k], result.psi[k], self.vehicle_body)
+            self.plot_car(result.x[k], result.y[k], result.psi[k], self.vehicle_body)
 
             # ax.set_xlim(xmin=-2.5, xmax=15 * 2.5)
             # ax.set_ylim(ymin=-2.5, ymax=15 * 2.5)
@@ -818,26 +879,29 @@ def main():
     """
     main
     """
+    vehicle = Vehicle(
+        rl_file_name="3v_rl_traj",
+        agent="vehicle_0",
+        color={"front": (1, 0, 0), "back": (0, 1, 0)},
+    )
     init_offset = VehicleState()
     init_offset.x.x = 0.1
     init_offset.x.y = 0.1
     init_offset.e.psi = np.pi / 20
-    planner = SingleVehiclePlanner(
-        rl_file_name="3v_rl_traj", agent="vehicle_0", init_offset=init_offset
+
+    zu0 = vehicle.solve_ws(
+        N=30, dt=0.1, init_offset=init_offset, shrink_tube=0.5, spline_ws=False
     )
-    zu0 = planner.solve_ws(N=30, shrink_tube=0.5, spline_ws=False)
-    # planner.plot_result(zu0, key_stride=30)
-    l0, m0 = planner.dual_ws(zu0=zu0, obstacles=planner.obstacles)
-    result = planner.solve(
-        zu0=zu0,
-        l0=l0,
-        m0=m0,
-        obstacles=planner.obstacles,
-        K=5,
-        N_per_set=5,
-        shrink_tube=0.5,
+
+    zu0 = vehicle.dual_ws(zu0)
+    zu0 = vehicle.interp_ws_for_collocation(zu0, K=5, N_per_set=5)
+    vehicle.setup_single_final_problem(
+        zu0=zu0, init_offset=init_offset, K=5, N_per_set=5, shrink_tube=0.5
     )
-    planner.plot_result(result, key_stride=30)
+
+    sol = vehicle.solve_single_final_problem()
+    result = vehicle.get_solution(sol=sol)
+    vehicle.plot_result(result, key_stride=30)
     print("done")
 
 
