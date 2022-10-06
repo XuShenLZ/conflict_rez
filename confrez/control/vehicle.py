@@ -6,7 +6,6 @@ import casadi as ca
 from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 
-from pytope import Polytope
 from confrez.control.compute_sets import (
     compute_initial_states,
     compute_obstacles,
@@ -14,7 +13,7 @@ from confrez.control.compute_sets import (
     interp_along_sets,
 )
 from confrez.control.dynamic_model import kinematic_bicycle_ct
-from confrez.control.utils import rot_mat_2d
+from confrez.control.utils import plot_car
 from confrez.obstacle_types import GeofenceRegion
 
 from confrez.pytypes import VehiclePrediction, VehicleState
@@ -96,7 +95,7 @@ class Vehicle(object):
 
         return A, B, D
 
-    def solve_ws(
+    def state_ws(
         self,
         N: int = 30,
         dt: float = 0.1,
@@ -808,23 +807,6 @@ class Vehicle(object):
 
         return result
 
-    def plot_car(self, x: float, y: float, yaw: float, vehicle_body: VehicleBody):
-        car_color = "-k"
-        rot = rot_mat_2d(-yaw)
-        car_outline_x, car_outline_y = [], []
-        for rx, ry in zip(vehicle_body.xy[:, 0], vehicle_body.xy[:, 1]):
-            converted_xy = np.stack([rx, ry]).T @ rot
-            car_outline_x.append(converted_xy[0] + x)
-            car_outline_y.append(converted_xy[1] + y)
-
-        plt.plot(car_outline_x, car_outline_y, car_color)
-        plt.plot(
-            [x, x + np.cos(yaw) * vehicle_body.wb],
-            [y, y + np.sin(yaw) * vehicle_body.wb],
-            "kD",
-            markersize=2.5,
-        )
-
     def plot_result(self, result: VehiclePrediction, key_stride: int = 6):
         """
         plot the sets and result
@@ -840,7 +822,7 @@ class Vehicle(object):
         for i in range(self.num_sets):
             k = key_stride * i
 
-            self.plot_car(result.x[k], result.y[k], result.psi[k], self.vehicle_body)
+            plot_car(result.x[k], result.y[k], result.psi[k], self.vehicle_body)
 
         ax.plot(result.x, result.y)
         ax.set_aspect("equal")
@@ -866,7 +848,7 @@ class Vehicle(object):
             body_sets["back"].plot(ax, facecolor=self.color["back"], alpha=0.5)
 
             k = key_stride * i
-            self.plot_car(result.x[k], result.y[k], result.psi[k], self.vehicle_body)
+            plot_car(result.x[k], result.y[k], result.psi[k], self.vehicle_body)
 
             # ax.set_xlim(xmin=-2.5, xmax=15 * 2.5)
             # ax.set_ylim(ymin=-2.5, ymax=15 * 2.5)
@@ -889,7 +871,7 @@ def main():
     init_offset.x.y = 0.1
     init_offset.e.psi = np.pi / 20
 
-    zu0 = vehicle.solve_ws(
+    zu0 = vehicle.state_ws(
         N=30, dt=0.1, init_offset=init_offset, shrink_tube=0.5, spline_ws=False
     )
 
