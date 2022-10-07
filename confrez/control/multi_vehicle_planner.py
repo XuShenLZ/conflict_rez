@@ -1,5 +1,4 @@
 from itertools import product
-from turtle import color
 from typing import Dict, Tuple
 import numpy as np
 import casadi as ca
@@ -98,7 +97,7 @@ class MultiVehiclePlanner(object):
             sol = vehicle.solve_single_final_problem()
             self.single_results[agent] = vehicle.get_solution(sol=sol)
 
-    def solve_final_problem(
+    def solve_final_problem_circles(
         self,
         K: int = 5,
         N_per_set: int = 5,
@@ -107,7 +106,7 @@ class MultiVehiclePlanner(object):
         d_buffer: float = 0.2,
     ):
         """
-        solve joint collision avoidance problem
+        solve joint collision avoidance problem. Using circles to approximate the rectangular vehicle body
         """
         print("Solving joint final problem...")
         # Initial guess for time step
@@ -168,6 +167,265 @@ class MultiVehiclePlanner(object):
                             ca.bilin(ca.MX.eye(2), vec, vec)
                             >= (self.vehicle_body.w + d_buffer) ** 2
                         )
+
+        opti.minimize(J)
+
+        p_opts = {"expand": True}
+        s_opts = {
+            "print_level": 0,
+            "tol": 1e-2,
+            "constr_viol_tol": 1e-2,
+            # "max_iter": 300,
+            # "mumps_mem_percent": 64000,
+            "linear_solver": "ma97",
+        }
+        opti.solver("ipopt", p_opts, s_opts)
+        sol = opti.solve()
+        print(sol.stats()["return_status"])
+
+        N_max = np.max([self.vehicles[agent].N for agent in self.agents])
+
+        final_t = np.linspace(
+            0, N_max * sol.value(dt), N_max * (K + 1) + 1, endpoint=True
+        )
+
+        self.final_results = {agent: VehiclePrediction() for agent in self.agents}
+        for agent in self.agents:
+            self.vehicles[agent].get_solution(sol=sol)
+            self.final_results[agent] = self.vehicles[agent].interpolate_states(final_t)
+
+    def joint_dual_ws(self, K=5, verbose=0):
+        """
+        warm starting the dual multipliers for joint collision avoidance
+        """
+        print("warm starting dual variables for joint OBCA...")
+        veh_G = self.vehicle_body.A
+        veh_g = self.vehicle_body.b
+
+        opti = ca.Opti()
+
+        obj = 0
+
+        l_joint = {}
+        m_joint = {}
+        d_joint = {}
+        for agent in self.agents:
+            this_vehicle = self.vehicles[agent]
+            this_x = self.single_results[agent].x[:-1].reshape((this_vehicle.N, K + 1))
+            this_y = self.single_results[agent].y[:-1].reshape((this_vehicle.N, K + 1))
+            this_psi = (
+                self.single_results[agent].psi[:-1].reshape((this_vehicle.N, K + 1))
+            )
+
+            l_joint[agent] = {}
+            m_joint[agent] = {}
+            d_joint[agent] = {}
+
+            others = self.agents - {agent}
+            for other in others:
+                other_vehicle = self.vehicles[other]
+                other_x = (
+                    self.single_results[other].x[:-1].reshape((other_vehicle.N, K + 1))
+                )
+                other_y = (
+                    self.single_results[other].y[:-1].reshape((other_vehicle.N, K + 1))
+                )
+                other_psi = (
+                    self.single_results[other]
+                    .psi[:-1]
+                    .reshape((other_vehicle.N, K + 1))
+                )
+
+                N_min = min(this_vehicle.N, other_vehicle.N)
+
+                l_joint[agent][other] = [
+                    [opti.variable(4) for _ in range(K + 1)] for _ in range(N_min)
+                ]
+                m_joint[agent][other] = [
+                    [opti.variable(4) for _ in range(K + 1)] for _ in range(N_min)
+                ]
+                d_joint[agent][other] = [
+                    [opti.variable() for _ in range(K + 1)] for _ in range(N_min)
+                ]
+
+                for i, k in product(range(N_min), range(K + 1)):
+                    lik = l_joint[agent][other][i][k]
+                    mik = m_joint[agent][other][i][k]
+                    dik = d_joint[agent][other][i][k]
+                    opti.subject_to(lik >= 0)
+                    opti.subject_to(mik >= 0)
+
+                    this_t = ca.vertcat(this_x[i, k], this_y[i, k])
+                    this_R = np.array(
+                        [
+                            [np.cos(this_psi[i, k]), -np.sin(this_psi[i, k])],
+                            [np.sin(this_psi[i, k]), np.cos(this_psi[i, k])],
+                        ]
+                    )
+
+                    other_t = ca.vertcat(other_x[i, k], other_y[i, k])
+                    other_R = np.array(
+                        [
+                            [np.cos(-other_psi[i, k]), -np.sin(-other_psi[i, k])],
+                            [np.sin(-other_psi[i, k]), np.cos(-other_psi[i, k])],
+                        ]
+                    )
+                    other_A = veh_G @ other_R
+                    other_b = veh_G @ other_R @ other_t + veh_g
+
+                    opti.subject_to(
+                        (
+                            ca.dot(-veh_g, mik)
+                            + ca.dot((other_A @ this_t - other_b), lik)
+                            == dik
+                        )
+                    )
+                    opti.subject_to(
+                        veh_G.T @ mik + this_R.T @ other_A.T @ lik == np.zeros(2)
+                    )
+                    opti.subject_to(ca.dot(other_A.T @ lik, other_A.T @ lik) <= 1)
+
+                    obj -= dik
+
+        opti.minimize(obj)
+        p_opts = {"expand": True}
+        s_opts = {"print_level": verbose}
+        opti.solver("ipopt", p_opts, s_opts)
+
+        sol = opti.solve()
+        print(sol.stats()["return_status"])
+
+        self.joint_l0 = {}
+        self.joint_m0 = {}
+        for agent in self.agents:
+            this_vehicle = self.vehicles[agent]
+
+            self.joint_l0[agent] = {}
+            self.joint_m0[agent] = {}
+
+            others = self.agents - {agent}
+            for other in others:
+                other_vehicle = self.vehicles[other]
+
+                N_min = min(this_vehicle.N, other_vehicle.N)
+
+                self.joint_l0[agent][other] = [
+                    [None for _ in range(K + 1)] for _ in range(N_min)
+                ]
+                self.joint_m0[agent][other] = [
+                    [None for _ in range(K + 1)] for _ in range(N_min)
+                ]
+                for i, k in product(range(N_min), range(K + 1)):
+                    lik = l_joint[agent][other][i][k]
+                    mik = m_joint[agent][other][i][k]
+
+                    self.joint_l0[agent][other][i][k] = sol.value(lik)
+                    self.joint_m0[agent][other][i][k] = sol.value(mik)
+
+    def solve_final_problem_obca(
+        self,
+        K: int = 5,
+        N_per_set: int = 5,
+        shrink_tube: float = 0.5,
+        dmin: float = 0.05,
+    ):
+        """
+        solve joint collision avoidance problem with OBCA
+        NOTE: This provides the exact solution, may be slower than circle approximation
+        """
+
+        self.joint_dual_ws(K=K)
+
+        print("Solving joint final problem with obca...")
+        # Initial guess for time step
+        dt0 = np.mean([self.single_results[agent].dt for agent in self.agents])
+
+        veh_G = self.vehicle_body.A
+        veh_g = self.vehicle_body.b
+
+        opti = ca.Opti()
+        dt = opti.variable()
+        opti.set_initial(dt, dt0)
+
+        J = 0
+
+        for agent in self.agents:
+            vehicle = self.vehicles[agent]
+
+            vehicle.setup_single_final_problem(
+                zu0=self.single_results[agent],
+                init_offset=self.init_offsets[agent],
+                opti=opti,
+                dt=dt,
+                K=K,
+                N_per_set=N_per_set,
+                dmin=dmin,
+                shrink_tube=shrink_tube,
+            )
+
+            J += vehicle.J
+
+        l_joint = {}
+        m_joint = {}
+        for agent in self.agents:
+            this_vehicle = self.vehicles[agent]
+            this_x = this_vehicle.x
+            this_y = this_vehicle.y
+            this_psi = this_vehicle.psi
+
+            l_joint[agent] = {}
+            m_joint[agent] = {}
+
+            others = self.agents - {agent}
+            for other in others:
+                other_vehicle = self.vehicles[other]
+                other_x = other_vehicle.x
+                other_y = other_vehicle.y
+                other_psi = other_vehicle.psi
+
+                N_min = min(this_vehicle.N, other_vehicle.N)
+
+                l_joint[agent][other] = [
+                    [opti.variable(4) for _ in range(K + 1)] for _ in range(N_min)
+                ]
+                m_joint[agent][other] = [
+                    [opti.variable(4) for _ in range(K + 1)] for _ in range(N_min)
+                ]
+
+                for i, k in product(range(N_min), range(K + 1)):
+                    lik = l_joint[agent][other][i][k]
+                    mik = m_joint[agent][other][i][k]
+                    opti.subject_to(lik >= 0)
+                    opti.subject_to(mik >= 0)
+
+                    opti.set_initial(lik, self.joint_l0[agent][other][i][k])
+                    opti.set_initial(mik, self.joint_m0[agent][other][i][k])
+
+                    this_t = ca.vertcat(this_x[i, k], this_y[i, k])
+                    this_R = ca.vertcat(
+                        ca.horzcat(ca.cos(this_psi[i, k]), -ca.sin(this_psi[i, k])),
+                        ca.horzcat(ca.sin(this_psi[i, k]), ca.cos(this_psi[i, k])),
+                    )
+
+                    other_t = ca.vertcat(other_x[i, k], other_y[i, k])
+                    other_R = ca.vertcat(
+                        ca.horzcat(ca.cos(-other_psi[i, k]), -ca.sin(-other_psi[i, k])),
+                        ca.horzcat(ca.sin(-other_psi[i, k]), ca.cos(-other_psi[i, k])),
+                    )
+                    other_A = veh_G @ other_R
+                    other_b = veh_G @ other_R @ other_t + veh_g
+
+                    opti.subject_to(
+                        (
+                            ca.dot(-veh_g, mik)
+                            + ca.dot((other_A @ this_t - other_b), lik)
+                            >= dmin
+                        )
+                    )
+                    opti.subject_to(
+                        veh_G.T @ mik + this_R.T @ other_A.T @ lik == np.zeros(2)
+                    )
+                    opti.subject_to(ca.dot(other_A.T @ lik, other_A.T @ lik) == 1)
 
         opti.minimize(J)
 
@@ -335,9 +593,10 @@ def main():
     planner.solve_single_problems(
         N=30, K=5, N_per_set=5, dt=0.1, shrink_tube=0.5, dmin=0.05
     )
-    planner.solve_final_problem(
-        K=5, N_per_set=5, shrink_tube=0.5, dmin=0.05, d_buffer=0.2
-    )
+    # planner.solve_final_problem_circles(
+    #     K=5, N_per_set=5, shrink_tube=0.5, dmin=0.05, d_buffer=0.3
+    # )
+    planner.solve_final_problem_obca(K=5, N_per_set=5, shrink_tube=0.5, dmin=0.05)
     planner.plot_results(interval=40)
 
 
