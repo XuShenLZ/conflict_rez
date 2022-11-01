@@ -2,11 +2,17 @@ from itertools import product
 from typing import Dict, Tuple
 import numpy as np
 import casadi as ca
+import dill
 
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, FFMpegWriter
 
-from confrez.control.compute_sets import compute_obstacles, compute_sets
+from confrez.control.compute_sets import (
+    compute_obstacles,
+    compute_parking_lines,
+    compute_sets,
+    compute_static_vehicles,
+)
 from confrez.control.rect2circles import v2c_ca
 from confrez.control.utils import plot_car
 from confrez.control.vehicle import Vehicle
@@ -328,6 +334,7 @@ class MultiVehiclePlanner(object):
         N_per_set: int = 5,
         shrink_tube: float = 0.5,
         dmin: float = 0.05,
+        interp_dt: float = None,
     ):
         """
         solve joint collision avoidance problem with OBCA
@@ -444,21 +451,36 @@ class MultiVehiclePlanner(object):
 
         N_max = np.max([self.vehicles[agent].N for agent in self.agents])
 
-        final_t = np.linspace(
-            0, N_max * sol.value(dt), N_max * (K + 1) + 1, endpoint=True
-        )
+        if interp_dt is None:
+            final_t = np.linspace(
+                0, N_max * sol.value(dt), N_max * (K + 1) + 1, endpoint=True
+            )
+        else:
+            final_t = np.arange(0, N_max * sol.value(dt), interp_dt)
 
         self.final_results = {agent: VehiclePrediction() for agent in self.agents}
         for agent in self.agents:
             self.vehicles[agent].get_solution(sol=sol)
             self.final_results[agent] = self.vehicles[agent].interpolate_states(final_t)
 
-    def plot_results(self, interval: int = 40):
+    def plot_results(self, interval: int = None):
         """
         Plot multi vehicle results
         """
         print("Plotting...")
+        if interval is None:
+            interval = int(
+                (
+                    self.single_results["vehicle_0"].t[1]
+                    - self.single_results["vehicle_0"].t[0]
+                )
+                * 1000
+            )
+
         plt.figure()
+        static_vehicles = compute_static_vehicles()
+        parking_lines = compute_parking_lines()
+
         for agent in self.agents:
             ax = plt.subplot(2, 1, 1)
             plt.plot(
@@ -513,21 +535,36 @@ class MultiVehiclePlanner(object):
         def plot_frame(i):
             ax.clear()
             for obstacle in self.obstacles:
-                obstacle.plot(ax, facecolor="b", alpha=0.5)
-            for agent in self.agents:
+                obstacle.plot(ax, facecolor=(0 / 255, 128 / 255, 255 / 255))
+            for obstacle in static_vehicles:
+                obstacle.plot(ax, fill=False, edgecolor="k", hatch="///")
+            for line in parking_lines:
+                plt.plot(line[:, 0], line[:, 1], "k--", linewidth=1)
+
+            for j, agent in enumerate(sorted(self.agents)):
                 ax.plot(
                     self.final_results[agent].x,
                     self.final_results[agent].y,
                     color=self.colors[agent]["front"],
                     label=agent,
+                    zorder=j,
                 )
                 plot_car(
                     self.final_results[agent].x[i],
                     self.final_results[agent].y[i],
                     self.final_results[agent].psi[i],
                     self.vehicle_body,
+                    text=j,
+                    zorder=10 + j,
                 )
+            ax.axis("off")
             ax.set_aspect("equal")
+            ax.legend(
+                loc="upper right",
+                bbox_to_anchor=(0.96, 0.97),
+                fontsize="large",
+            )
+            plt.tight_layout()
 
         ani = FuncAnimation(
             fig,
@@ -579,9 +616,6 @@ def main():
         "vehicle_2": VehicleState(),
         "vehicle_3": VehicleState(),
     }
-    # init_offsets["vehicle_0"].x.x = 0.1
-    # init_offsets["vehicle_0"].x.y = 0.1
-    # init_offsets["vehicle_0"].e.psi = np.pi / 20
 
     planner = MultiVehiclePlanner(
         rl_file_name=rl_file_name,
@@ -596,8 +630,11 @@ def main():
     # planner.solve_final_problem_circles(
     #     K=5, N_per_set=5, shrink_tube=0.5, dmin=0.05, d_buffer=0.3
     # )
-    planner.solve_final_problem_obca(K=5, N_per_set=5, shrink_tube=0.5, dmin=0.05)
-    planner.plot_results(interval=40)
+    planner.solve_final_problem_obca(
+        K=5, N_per_set=5, shrink_tube=0.5, dmin=0.05, interp_dt=0.025
+    )
+    dill.dump(planner.final_results, open(f"{rl_file_name}_opt.pkl", "wb"))
+    planner.plot_results()
 
 
 if __name__ == "__main__":

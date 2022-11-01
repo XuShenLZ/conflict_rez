@@ -1,3 +1,8 @@
+# Results
+*.pdf
+*.png
+*.mp4
+
 # Data
 *.pkl
 

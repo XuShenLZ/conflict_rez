@@ -10,9 +10,11 @@ import numpy as np
 
 from collections import defaultdict
 from confrez.control.bezier import BezierPlanner
-from confrez.control.utils import pi_2_pi
+from confrez.control.utils import pi_2_pi, plot_car, plot_rl_agent
 from confrez.pytypes import VehicleState
 from confrez.vehicle_types import VehicleBody
+
+np.random.seed(0)
 
 COLORS = {
     "vehicle_0": {"front": (255, 119, 0), "back": (128, 60, 0)},
@@ -37,86 +39,86 @@ def compute_sets(file_name: str, L=2.5) -> Dict[str, List[Dict[str, Polytope]]]:
         "back": defaultdict(lambda: Polytope(V)),
     }
 
-    # Pentagon-shape sets for all other directions
-    base_sets["front"][(1, 1)] = Polytope(
-        [
-            [-L / 4, L / 4],
-            [L / 2, L],
-            [L, L],
-            [L, L / 2],
-            [L / 4, -L / 4],
-        ]
-    )
+    # # Pentagon-shape sets for all other directions
+    # base_sets["front"][(1, 1)] = Polytope(
+    #     [
+    #         [-L / 4, L / 4],
+    #         [L / 2, L],
+    #         [L, L],
+    #         [L, L / 2],
+    #         [L / 4, -L / 4],
+    #     ]
+    # )
 
-    base_sets["front"][(-1, 1)] = Polytope(
-        [
-            [L * 3 / 4, -L / 4],
-            [0, L / 2],
-            [0, L],
-            [L / 2, L],
-            [L * 5 / 4, L / 4],
-        ]
-    )
+    # base_sets["front"][(-1, 1)] = Polytope(
+    #     [
+    #         [L * 3 / 4, -L / 4],
+    #         [0, L / 2],
+    #         [0, L],
+    #         [L / 2, L],
+    #         [L * 5 / 4, L / 4],
+    #     ]
+    # )
 
-    base_sets["front"][(1, -1)] = Polytope(
-        [
-            [-L / 4, L * 3 / 4],
-            [L / 2, 0],
-            [L, 0],
-            [L, L / 2],
-            [L / 4, L * 5 / 4],
-        ]
-    )
+    # base_sets["front"][(1, -1)] = Polytope(
+    #     [
+    #         [-L / 4, L * 3 / 4],
+    #         [L / 2, 0],
+    #         [L, 0],
+    #         [L, L / 2],
+    #         [L / 4, L * 5 / 4],
+    #     ]
+    # )
 
-    base_sets["front"][(-1, -1)] = Polytope(
-        [
-            [0, 0],
-            [0, L / 2],
-            [L * 3 / 4, L * 5 / 4],
-            [L * 5 / 4, L * 3 / 4],
-            [L / 2, 0],
-        ]
-    )
+    # base_sets["front"][(-1, -1)] = Polytope(
+    #     [
+    #         [0, 0],
+    #         [0, L / 2],
+    #         [L * 3 / 4, L * 5 / 4],
+    #         [L * 5 / 4, L * 3 / 4],
+    #         [L / 2, 0],
+    #     ]
+    # )
 
-    base_sets["back"][(1, 1)] = Polytope(
-        [
-            [0, 0],
-            [0, L / 2],
-            [L * 3 / 4, L * 5 / 4],
-            [L * 5 / 4, L * 3 / 4],
-            [L / 2, 0],
-        ]
-    )
+    # base_sets["back"][(1, 1)] = Polytope(
+    #     [
+    #         [0, 0],
+    #         [0, L / 2],
+    #         [L * 3 / 4, L * 5 / 4],
+    #         [L * 5 / 4, L * 3 / 4],
+    #         [L / 2, 0],
+    #     ]
+    # )
 
-    base_sets["back"][(-1, 1)] = Polytope(
-        [
-            [-L / 4, L * 3 / 4],
-            [L / 2, 0],
-            [L, 0],
-            [L, L / 2],
-            [L / 4, L * 5 / 4],
-        ]
-    )
+    # base_sets["back"][(-1, 1)] = Polytope(
+    #     [
+    #         [-L / 4, L * 3 / 4],
+    #         [L / 2, 0],
+    #         [L, 0],
+    #         [L, L / 2],
+    #         [L / 4, L * 5 / 4],
+    #     ]
+    # )
 
-    base_sets["back"][(1, -1)] = Polytope(
-        [
-            [L * 3 / 4, -L / 4],
-            [0, L / 2],
-            [0, L],
-            [L / 2, L],
-            [L * 5 / 4, L / 4],
-        ]
-    )
+    # base_sets["back"][(1, -1)] = Polytope(
+    #     [
+    #         [L * 3 / 4, -L / 4],
+    #         [0, L / 2],
+    #         [0, L],
+    #         [L / 2, L],
+    #         [L * 5 / 4, L / 4],
+    #     ]
+    # )
 
-    base_sets["back"][(-1, -1)] = Polytope(
-        [
-            [-L / 4, L / 4],
-            [L / 2, L],
-            [L, L],
-            [L, L / 2],
-            [L / 4, -L / 4],
-        ]
-    )
+    # base_sets["back"][(-1, -1)] = Polytope(
+    #     [
+    #         [-L / 4, L / 4],
+    #         [L / 2, L],
+    #         [L, L],
+    #         [L, L / 2],
+    #         [L / 4, -L / 4],
+    #     ]
+    # )
 
     rl_sets: Dict[str, List[Dict[str, Polytope]]] = {
         agent: [] for agent in rl_states_history
@@ -149,8 +151,10 @@ def convert_rl_states(
 
     if dir[1] == 0:
         center = np.array([max(front[0], back[0]) * L, (front[1] + 0.5) * L])
-    else:
+    elif dir[0] == 0:
         center = np.array([(front[0] + 0.5) * L, max(front[1], back[1]) * L])
+    else:
+        center = np.array([max(front[0], back[0]) * L, max(front[1], back[1]) * L])
 
     wb = vehicle_body.wb
     # Vehicle reference point
@@ -326,11 +330,115 @@ def compute_obstacles(
     return obstacles
 
 
+def compute_parking_lines(L: float = 2.5):
+    """
+    compute parking lines to draw
+    """
+    lines = [
+        np.array([[L, 3 * L], [13 * L, 3 * L]]),
+        np.array([[L, 11 * L], [13 * L, 11 * L]]),
+    ]
+
+    for i in range(1, 14):
+        lines.append(np.array([[i * L, 3 * L], [i * L, 5.5 * L]]))
+        lines.append(np.array([[i * L, 8.5 * L], [i * L, 11 * L]]))
+
+    return lines
+
+
+def compute_static_vehicles(L: float = 2.5, vb: VehicleBody = VehicleBody()):
+    """
+    compute static vehicles
+    """
+    vehicles = []
+
+    # Lower lane
+    for i in range(1, 5):
+        random_offset = np.random.sample() * 0.7 * L
+        vehicles.append(
+            Polytope(
+                [
+                    [(i + 0.5) * L - vb.w / 2, 5.5 * L - random_offset],
+                    [(i + 0.5) * L + vb.w / 2, 5.5 * L - random_offset],
+                    [(i + 0.5) * L + vb.w / 2, 5.5 * L - random_offset - vb.l],
+                    [(i + 0.5) * L - vb.w / 2, 5.5 * L - random_offset - vb.l],
+                ]
+            )
+        )
+
+    for i in [5, 7]:
+        vehicles.append(
+            Polytope(
+                [
+                    [(i + 0.5) * L - vb.w / 2, 5.5 * L],
+                    [(i + 0.5) * L + vb.w / 2, 5.5 * L],
+                    [(i + 0.5) * L + vb.w / 2, 5.5 * L - vb.l],
+                    [(i + 0.5) * L - vb.w / 2, 5.5 * L - vb.l],
+                ]
+            )
+        )
+
+    for i in range(9, 13):
+        random_offset = np.random.sample() * 0.7 * L
+        vehicles.append(
+            Polytope(
+                [
+                    [(i + 0.5) * L - vb.w / 2, 5.5 * L - random_offset],
+                    [(i + 0.5) * L + vb.w / 2, 5.5 * L - random_offset],
+                    [(i + 0.5) * L + vb.w / 2, 5.5 * L - random_offset - vb.l],
+                    [(i + 0.5) * L - vb.w / 2, 5.5 * L - random_offset - vb.l],
+                ]
+            )
+        )
+
+    # Upper lane
+    for i in range(1, 5):
+        random_offset = np.random.sample() * 0.7 * L
+        vehicles.append(
+            Polytope(
+                [
+                    [(i + 0.5) * L - vb.w / 2, 8.5 * L + random_offset],
+                    [(i + 0.5) * L + vb.w / 2, 8.5 * L + random_offset],
+                    [(i + 0.5) * L + vb.w / 2, 8.5 * L + random_offset + vb.l],
+                    [(i + 0.5) * L - vb.w / 2, 8.5 * L + random_offset + vb.l],
+                ]
+            )
+        )
+
+    for i in [5, 7, 8]:
+        vehicles.append(
+            Polytope(
+                [
+                    [(i + 0.5) * L - vb.w / 2, 8.5 * L],
+                    [(i + 0.5) * L + vb.w / 2, 8.5 * L],
+                    [(i + 0.5) * L + vb.w / 2, 8.5 * L + vb.l],
+                    [(i + 0.5) * L - vb.w / 2, 8.5 * L + vb.l],
+                ]
+            )
+        )
+
+    for i in range(10, 13):
+        random_offset = np.random.sample() * 0.7 * L
+        vehicles.append(
+            Polytope(
+                [
+                    [(i + 0.5) * L - vb.w / 2, 8.5 * L + random_offset],
+                    [(i + 0.5) * L + vb.w / 2, 8.5 * L + random_offset],
+                    [(i + 0.5) * L + vb.w / 2, 8.5 * L + random_offset + vb.l],
+                    [(i + 0.5) * L - vb.w / 2, 8.5 * L + random_offset + vb.l],
+                ]
+            )
+        )
+
+    return vehicles
+
+
 def main():
     """
     main function
     """
-    file_name = "3v_rl_traj"
+    L = 2.5
+    file_name = "4v_rl_traj"
     rl_sets = compute_sets(file_name)
     init_states = compute_initial_states(
         file_name=file_name, vehicle_body=VehicleBody()
@@ -342,18 +450,7 @@ def main():
         file_name=file_name, vehicle_body=VehicleBody(), N=30
     )
 
-    plt.figure()
-    for x, y in product(range(14), repeat=2):
-        plt.axhline(y=y * 2.5, xmin=0, xmax=13 * 2.5, color="k", linewidth=0.5)
-        plt.axvline(x=x * 2.5, ymin=0, ymax=13 * 2.5, color="k", linewidth=0.5)
-    ax = plt.gca()
-    for p in obstacles:
-        p.plot(ax, facecolor="b")
-    ax.set_xlim(xmin=-2.5, xmax=15 * 2.5)
-    ax.set_ylim(ymin=-2.5, ymax=15 * 2.5)
-    ax.set_aspect("equal")
-    plt.title("Obstacles")
-
+    # ================= Plot strategy guided sets of all vehicles ====================
     plt.figure()
     max_num_sets = max(list(map(lambda x: len(x), rl_sets.values())))
     ncol = 4
@@ -362,19 +459,20 @@ def main():
         for i, body_sets in enumerate(rl_sets[agent]):
             ax = plt.subplot(nrow, ncol, i + 1)
             for p in obstacles:
-                p.plot(ax, facecolor="b")
+                p.plot(ax, facecolor=(0 / 255, 128 / 255, 255 / 255))
             body_sets["front"].plot(
                 ax,
-                alpha=0.5,
-                facecolor=tuple(map(lambda x: x / 255.0, COLORS[agent]["front"])),
+                # alpha=0.5,
+                facecolor=np.array(COLORS[agent]["front"]) / 255.0,
             )
             body_sets["back"].plot(
                 ax,
-                alpha=0.5,
-                facecolor=tuple(map(lambda x: x / 255.0, COLORS[agent]["back"])),
+                # alpha=0.5,
+                facecolor=np.array(COLORS[agent]["back"]) / 255.0,
             )
             ax.set_xlim(xmin=0, xmax=13 * 2.5)
             ax.set_ylim(ymin=3 * 2.5, ymax=11 * 2.5)
+            # ax.axis('off')
             ax.set_aspect("equal")
 
     plt.figure()
@@ -392,6 +490,8 @@ def main():
         plt.plot(xypsi[:, 2], label=agent)
     plt.legend()
     plt.title("Heading of agents")
+
+    plt.tight_layout()
 
     plt.show()
     print("done")

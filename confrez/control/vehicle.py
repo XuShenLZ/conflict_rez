@@ -2,6 +2,7 @@ from math import ceil
 from typing import Dict, Tuple
 import numpy as np
 import casadi as ca
+import dill
 
 from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
@@ -861,15 +862,14 @@ def main():
     """
     main
     """
+    rl_file_name = "4v_rl_traj"
+    agent = "vehicle_0"
     vehicle = Vehicle(
-        rl_file_name="3v_rl_traj",
-        agent="vehicle_0",
+        rl_file_name=rl_file_name,
+        agent=agent,
         color={"front": (1, 0, 0), "back": (0, 1, 0)},
     )
     init_offset = VehicleState()
-    init_offset.x.x = 0.1
-    init_offset.x.y = 0.1
-    init_offset.e.psi = np.pi / 20
 
     zu0 = vehicle.state_ws(
         N=30, dt=0.1, init_offset=init_offset, shrink_tube=0.5, spline_ws=False
@@ -884,7 +884,9 @@ def main():
     sol = vehicle.solve_single_final_problem()
     result = vehicle.get_solution(sol=sol)
     vehicle.plot_result(result, key_stride=30)
-    print("done")
+
+    dill.dump(zu0, open(f"{rl_file_name}_{agent}_zu0.pkl", "wb"))
+    dill.dump(result, open(f"{rl_file_name}_{agent}_zufinal.pkl", "wb"))
 
 
 if __name__ == "__main__":
