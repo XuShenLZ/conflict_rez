@@ -8,7 +8,11 @@ Xu Shen (xu_shen@berkeley.edu), Francesco Borrelli
 
 ## Install
 1. Clone this repo
-2. Run `pip install -e .` (A virtualenv is recommended)
+2. Run `pip install -e .` in the root level of this repo (A virtualenv is recommended). However, due to some buggy dependencies between package versions, you need to manually switch the following packages to specific versions (while ignoring the warning given by the pip dependency resolver):
+    1. `pip install pettingzoo==1.20.1`
+    2. `pip install supersuit==3.5.0`
+    3. `pip install stable-baselines3==1.6.0`
+    4. `pip install gym==0.25.0`
 
 ## Testing
 1. A pretrained model can be downloaded [here](https://drive.google.com/file/d/10atWJc3hnfziuEjkJWI-BA6LhUGnzoJr/view?usp=sharing).
