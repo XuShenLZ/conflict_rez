@@ -1,3 +1,4 @@
+#Credit from Phil Tabor: https://github.com/philtabor/Multi-Agent-Deep-Deterministic-Policy-Gradients
 import torch as T
 import torch.nn.functional as F
 from agent import Agent

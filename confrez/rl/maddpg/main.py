@@ -34,7 +34,7 @@ if __name__ == '__main__':
     MAX_STEPS = 25
     total_steps = 0
     score_history = []
-    evaluate = True
+    evaluate = False
     best_score = -999
 
     if evaluate:
