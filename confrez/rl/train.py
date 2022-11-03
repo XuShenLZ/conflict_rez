@@ -2,13 +2,16 @@ from typing import Callable, List
 from confrez.rl.pklot_env import parallel_env
 from confrez.rl.utils import TensorboardCallback
 import supersuit as ss
-from stable_baselines3 import PPO, DQN
+from stable_baselines3 import DQN
+from stable_baselines3.common.utils import set_random_seed
 from scipy import interpolate
 
 from datetime import datetime
 from os import path as os_path
 
 cwd = os_path.dirname(__file__)
+
+set_random_seed(0)
 
 MODEL_NAME = "DQN-CNN-4v-fixed"
 

@@ -871,8 +871,19 @@ def main():
     )
     init_offset = VehicleState()
 
+    spline_ws_config = {
+        "vehicle_0": False,
+        "vehicle_1": True,
+        "vehicle_2": True,
+        "vehicle_3": True,
+    }
+
     zu0 = vehicle.state_ws(
-        N=30, dt=0.1, init_offset=init_offset, shrink_tube=0.5, spline_ws=False
+        N=30,
+        dt=0.1,
+        init_offset=init_offset,
+        shrink_tube=0.5,
+        spline_ws=spline_ws_config[agent],
     )
 
     zu0 = vehicle.dual_ws(zu0)
