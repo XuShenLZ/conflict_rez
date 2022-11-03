@@ -1,15 +1,15 @@
 from time import sleep
 from confrez.rl.pklot_env import parallel_env
-from confrez.rl.utils import ProcessMonitor
-from stable_baselines3 import DQN, PPO
+
+# from confrez.rl.utils import ProcessMonitor
+from stable_baselines3 import DQN
 import supersuit as ss
 
-env = parallel_env(n_vehicles=3, random_reset=True)
+env = parallel_env(n_vehicles=4, random_reset=False)
 env = ss.resize_v1(env, 140, 140)
 # monitor = ProcessMonitor(env)
 
-# model = PPO.load("PPO-CNN_07-31-2022_10-12-36")
-model = DQN.load("DQN-CNN-4v-mixed_08-12-2022_01-00-37")
+model = DQN.load("DQN-CNN-4v-new-color_08-06-2022_23-26-16")
 
 observations = env.reset(seed=0)
 env.render()

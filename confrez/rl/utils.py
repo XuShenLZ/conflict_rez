@@ -1,8 +1,49 @@
-from typing import Dict
+from typing import Dict, Union
+
+import gym
+from stable_baselines3.common.vec_env import VecEnv
+from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.evaluation import evaluate_policy
 
 import numpy as np
 from confrez.rl.pklot_env import parallel_env
 import matplotlib.pyplot as plt
+
+
+class TensorboardCallback(BaseCallback):
+    """
+    Custom callback for plotting additional values in tensorboard.
+    """
+
+    def __init__(
+        self,
+        eval_env: Union[gym.Env, VecEnv],
+        n_eval_episodes: int = 5,
+        eval_freq: int = 10000,
+        verbose=0,
+    ):
+        super(TensorboardCallback, self).__init__(verbose)
+
+        self.eval_env = eval_env
+        self.n_eval_episodes = n_eval_episodes
+        self.eval_freq = eval_freq
+
+    def _on_step(self) -> bool:
+
+        if self.eval_freq > 0 and self.n_calls % self.eval_freq == 0:
+            episode_rewards, episode_lengths = evaluate_policy(
+                self.model,
+                self.eval_env,
+                n_eval_episodes=self.n_eval_episodes,
+                return_episode_rewards=False,
+                deterministic=False,
+            )
+
+            self.logger.record("eval/mean_epi_rewards", episode_rewards)
+
+            self.logger.record("eval/mean_epi_lengths", episode_lengths)
+
+        return True
 
 
 class ProcessMonitor(object):
