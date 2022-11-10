@@ -5,6 +5,7 @@
 
 # Data
 *.pkl
+*.csv
 
 # Model
 *.zip

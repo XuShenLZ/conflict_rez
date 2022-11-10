@@ -471,8 +471,8 @@ class MultiVehiclePlanner(object):
         if interval is None:
             interval = int(
                 (
-                    self.single_results["vehicle_0"].t[1]
-                    - self.single_results["vehicle_0"].t[0]
+                    self.final_results["vehicle_0"].t[1]
+                    - self.final_results["vehicle_0"].t[0]
                 )
                 * 1000
             )
@@ -569,13 +569,14 @@ class MultiVehiclePlanner(object):
         ani = FuncAnimation(
             fig,
             plot_frame,
-            frames=len(self.single_results["vehicle_0"].t),
+            frames=len(self.final_results["vehicle_0"].t),
             interval=interval,
             repeat=True,
         )
 
-        writer = FFMpegWriter(fps=int(1000 / interval))
-        ani.save(self.rl_file_name + "_animation.mp4", writer=writer)
+        fps = int(1000 / interval)
+        writer = FFMpegWriter(fps=fps)
+        ani.save(f"{self.rl_file_name}_{fps}fps_animation.mp4", writer=writer)
 
         plt.show()
 
