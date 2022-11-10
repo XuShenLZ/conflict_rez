@@ -696,12 +696,47 @@ def generate_animation(sol_file_name: str = "4v_rl_traj_opt", interval: int = No
     ani.save(f"{sol_file_name}_{fps}fps_animation.mp4", writer=writer)
 
 
+def plot_training_rewards(csv_file_name: str, smoothing_factor: float = 0.92):
+    """
+    plot the training rewards
+    """
+    import pandas as pd
+    import seaborn as sns
+
+    sns.set_theme(style="darkgrid")
+
+    df = pd.read_csv(csv_file_name)
+
+    smoothed_df = df.ewm(alpha=(1 - smoothing_factor)).mean()
+
+    fig = plt.figure(figsize=(14, 4))
+
+    sns.lineplot(x="Step", y="Value", data=smoothed_df, linewidth=3)
+
+    ax = plt.gca()
+    ax.set_ylabel(
+        "Reward",
+        fontname="Times New Roman",
+        fontsize=25,
+        fontweight="bold",
+    )
+    ax.set_xlabel("Step", fontname="Times New Roman", fontsize=25, fontweight="bold")
+    ax.tick_params(axis="x", labelsize="x-large")
+    ax.tick_params(axis="y", labelsize="x-large")
+    ax.ticklabel_format(axis="y", style="sci")
+
+    # plt.plot(smoothed_df["Value"])
+
+    # plt.tight_layout()
+    fig.savefig("training_rewards.pdf", bbox_inches="tight")
+
+
 def main():
     """
     main function
     """
     rl_file_name = "4v_rl_traj"
-    plot_grid_scenario(rl_file_name=rl_file_name)
+    # plot_grid_scenario(rl_file_name=rl_file_name)
     # plot_single_vehicle_spline(rl_file_name=rl_file_name)
     sv_ws_file_name = "4v_rl_traj_vehicle_0_zu0"
     # plot_single_vehicle_ws(rl_file_name=rl_file_name, sol_file_name=sv_ws_file_name)
@@ -722,6 +757,11 @@ def main():
     # plot_multi_vehicle_states(sol_file_name=mv_sol_file_name)
 
     # generate_animation(sol_file_name=mv_sol_file_name, interval=40)
+
+    csv_file_name = (
+        "run-DQN-CNN-4v-fixed_11-01-2022_11-03-10_1-tag-eval_mean_epi_rewards.csv"
+    )
+    plot_training_rewards(csv_file_name=csv_file_name)
 
     plt.show()
 

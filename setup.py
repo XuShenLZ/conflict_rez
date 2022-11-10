@@ -12,15 +12,13 @@ setuptools.setup(
         "numpy",
         "scipy",
         "matplotlib",
+        "seaborn",
         "casadi",
         "pytope",
         "pettingzoo",
         "stable-baselines3[extra]",
         "supersuit",
-        "jupyterlab",
         "pygame",
-        "pymunk",
-        "triangle",
     ],
     # install pytorch according to CUDA version / CPU
 )
