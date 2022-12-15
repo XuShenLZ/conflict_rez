@@ -323,7 +323,7 @@ class Vehicle(object):
         t_interp = np.array([])
         for i in range(N):
             t_interp = np.append(t_interp, i + tau_root)
-        t_interp = np.append(t_interp, N)
+        # t_interp = np.append(t_interp, N) # No need for radau
         t_interp = t_interp / N * zu0.t[-1]
 
         output = VehiclePrediction()
@@ -618,14 +618,14 @@ class Vehicle(object):
         self.opti.subject_to(self.uF[1] == 0)
 
         # Initial guess
-        self.opti.set_initial(self.x, zu0.x[:-1].reshape(N, K + 1))
-        self.opti.set_initial(self.y, zu0.y[:-1].reshape(N, K + 1))
-        self.opti.set_initial(self.psi, zu0.psi[:-1].reshape(N, K + 1))
-        self.opti.set_initial(self.v, zu0.v[:-1].reshape(N, K + 1))
-        self.opti.set_initial(self.delta, zu0.u_steer[:-1].reshape(N, K + 1))
+        self.opti.set_initial(self.x, zu0.x.reshape(N, K + 1))
+        self.opti.set_initial(self.y, zu0.y.reshape(N, K + 1))
+        self.opti.set_initial(self.psi, zu0.psi.reshape(N, K + 1))
+        self.opti.set_initial(self.v, zu0.v.reshape(N, K + 1))
+        self.opti.set_initial(self.delta, zu0.u_steer.reshape(N, K + 1))
 
-        self.opti.set_initial(self.a, zu0.u_a[:-1].reshape(N, K + 1))
-        self.opti.set_initial(self.w, zu0.u_steer_dot[:-1].reshape(N, K + 1))
+        self.opti.set_initial(self.a, zu0.u_a.reshape(N, K + 1))
+        self.opti.set_initial(self.w, zu0.u_steer_dot.reshape(N, K + 1))
 
         self.J += (N * self.dt) ** 2
 
@@ -675,18 +675,30 @@ class Vehicle(object):
         t_collo = np.array([])
         for i in range(self.N):
             t_collo = np.append(t_collo, i + tau_root)
-        t_collo = np.append(t_collo, self.N)
+        # t_collo = np.append(t_collo, self.N) # No need for radau
         result.t = t_collo * sol.value(self.dt)
 
-        result.x = np.append(x_opt, sol.value(self.zF[0]))
-        result.y = np.append(y_opt, sol.value(self.zF[1]))
-        result.psi = np.append(psi_opt, sol.value(self.zF[2]))
+        # ====== Needed for legendre collocation points, not for radau
+        # result.x = np.append(x_opt, sol.value(self.zF[0]))
+        # result.y = np.append(y_opt, sol.value(self.zF[1]))
+        # result.psi = np.append(psi_opt, sol.value(self.zF[2]))
 
-        result.v = np.append(v_opt, sol.value(self.zF[3]))
-        result.u_steer = np.append(delta_opt, sol.value(self.zF[4]))
+        # result.v = np.append(v_opt, sol.value(self.zF[3]))
+        # result.u_steer = np.append(delta_opt, sol.value(self.zF[4]))
 
-        result.u_a = np.append(a_opt, sol.value(self.uF[0]))
-        result.u_steer_dot = np.append(w_opt, sol.value(self.uF[1]))
+        # result.u_a = np.append(a_opt, sol.value(self.uF[0]))
+        # result.u_steer_dot = np.append(w_opt, sol.value(self.uF[1]))
+        # ======
+
+        result.x = x_opt
+        result.y = y_opt
+        result.psi = psi_opt
+
+        result.v = v_opt
+        result.u_steer = delta_opt
+
+        result.u_a = a_opt
+        result.u_steer_dot = w_opt
 
         result.l = [[None for _ in range(self.K + 1)] for _ in range(self.N)]
         result.m = [[None for _ in range(self.K + 1)] for _ in range(self.N)]
@@ -707,11 +719,11 @@ class Vehicle(object):
         `dt`: (float) The optimal interval length
         `opt`: (VehiclePrediction) The optimal state-input solution
         """
-        x_opt = np.reshape(opt.x[:-1], (N, K + 1))
-        y_opt = np.reshape(opt.y[:-1], (N, K + 1))
-        psi_opt = np.reshape(opt.psi[:-1], (N, K + 1))
-        v_opt = np.reshape(opt.v[:-1], (N, K + 1))
-        delta_opt = np.reshape(opt.u_steer[:-1], (N, K + 1))
+        x_opt = np.reshape(opt.x, (N, K + 1))
+        y_opt = np.reshape(opt.y, (N, K + 1))
+        psi_opt = np.reshape(opt.psi, (N, K + 1))
+        v_opt = np.reshape(opt.v, (N, K + 1))
+        delta_opt = np.reshape(opt.u_steer, (N, K + 1))
 
         X = np.stack([x_opt, y_opt, psi_opt, v_opt, delta_opt], axis=-1)
 
@@ -821,7 +833,7 @@ class Vehicle(object):
             body_sets["back"].plot(ax, facecolor=self.color["back"], alpha=0.5)
 
         for i in range(self.num_sets):
-            k = key_stride * i
+            k = min(key_stride * i, len(result.x) - 1)
 
             plot_car(result.x[k], result.y[k], result.psi[k], self.vehicle_body)
 
@@ -848,7 +860,7 @@ class Vehicle(object):
             body_sets["front"].plot(ax, facecolor=self.color["front"], alpha=0.5)
             body_sets["back"].plot(ax, facecolor=self.color["back"], alpha=0.5)
 
-            k = key_stride * i
+            k = min(key_stride * i, len(result.x) - 1)
             plot_car(result.x[k], result.y[k], result.psi[k], self.vehicle_body)
 
             # ax.set_xlim(xmin=-2.5, xmax=15 * 2.5)
