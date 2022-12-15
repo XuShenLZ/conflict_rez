@@ -226,21 +226,21 @@ class MultiVehiclePlanner(object):
                 l_joint[other] = {}
 
             this_vehicle = self.vehicles[agent]
-            this_x = self.single_results[agent].x[:-1].reshape((this_vehicle.N, K + 1))
-            this_y = self.single_results[agent].y[:-1].reshape((this_vehicle.N, K + 1))
+            this_x = self.single_results[agent].x.reshape((this_vehicle.N, K + 1))
+            this_y = self.single_results[agent].y.reshape((this_vehicle.N, K + 1))
             this_psi = (
-                self.single_results[agent].psi[:-1].reshape((this_vehicle.N, K + 1))
+                self.single_results[agent].psi.reshape((this_vehicle.N, K + 1))
             )
 
             other_vehicle = self.vehicles[other]
             other_x = (
-                self.single_results[other].x[:-1].reshape((other_vehicle.N, K + 1))
+                self.single_results[other].x.reshape((other_vehicle.N, K + 1))
             )
             other_y = (
-                self.single_results[other].y[:-1].reshape((other_vehicle.N, K + 1))
+                self.single_results[other].y.reshape((other_vehicle.N, K + 1))
             )
             other_psi = (
-                self.single_results[other].psi[:-1].reshape((other_vehicle.N, K + 1))
+                self.single_results[other].psi.reshape((other_vehicle.N, K + 1))
             )
 
             N_min = min(this_vehicle.N, other_vehicle.N)
