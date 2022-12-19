@@ -172,6 +172,7 @@ class VehicleActuation(PythonMsg):
 
     u_a: float = field(default=0)
     u_steer: float = field(default=0)
+    u_steer_dot: float = field(default=0)
 
     def __str__(self):
         return "t:{self.t}, u_a:{self.u_a}, u_steer:{self.u_steer}".format(self=self)
