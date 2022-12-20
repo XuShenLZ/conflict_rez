@@ -1,19 +1,29 @@
 from typing import Dict, Tuple, List
 import numpy as np
-from itertools import product
-from scipy.spatial import distance
 import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation, FFMpegWriter
 
 from tqdm import tqdm
 
 import casadi as ca
 
-from confrez.control.dynamic_model import kinematic_bicycle_rk
+from confrez.control.compute_sets import (
+    compute_obstacles,
+    compute_parking_lines,
+    compute_sets,
+    compute_static_vehicles,
+)
+
+from confrez.control.dynamic_model import kinematic_bicycle_rk, simulator
 from confrez.obstacle_types import GeofenceRegion
 from confrez.vehicle_types import VehicleBody, VehicleConfig
 from confrez.control.vehicle import Vehicle
 
+from confrez.control.utils import plot_car
+
 from confrez.pytypes import VehiclePrediction, VehicleState
+
+np.random.seed(0)
 
 
 class VehicleFollower(Vehicle):
@@ -161,6 +171,7 @@ class VehicleFollower(Vehicle):
         J = 0
 
         f_dt = kinematic_bicycle_rk(dt=dt, vehicle_body=self.vehicle_body)
+        self.simulator = simulator(dt=dt, vehicle_body=self.vehicle_body)
 
         self.opti.subject_to(self.x[0] == self.current_x)
         self.opti.subject_to(self.y[0] == self.current_y)
@@ -365,15 +376,13 @@ class VehicleFollower(Vehicle):
                 ]
             )
         )
-        # if abs(self.state.v.v) < 1e-2:
-        #     print("speed is almost zero")
 
         result = self.interpolate_states(time=interp_t_span)
 
         if self.pred is None:
             self.pred = result.copy()
-            self.pred.l = 0.1*np.random.rand(*self.l.shape)
-            self.pred.m = 0.1*np.random.rand(*self.m.shape)
+            self.pred.l = 0.1 * np.random.rand(*self.l.shape)
+            self.pred.m = 0.1 * np.random.rand(*self.m.shape)
 
         return result
 
@@ -382,7 +391,7 @@ class VehicleFollower(Vehicle):
         get others open-loop prediction
         """
         for v in self.others:
-            self.others_pred[v.agent] = v.pred
+            self.others_pred[v.agent] = v.pred.copy()
 
     def _adv_onestep(self, array: np.ndarray):
         """
@@ -472,6 +481,25 @@ class VehicleFollower(Vehicle):
             self.opt_lambda_ji[v.agent] = sol.value(self.lambda_ji[v.agent])
             self.opt_s[v.agent] = sol.value(self.s[v.agent])
 
+        # ======== Using Casadi integrator for simulation, might lead to solver failure now
+        # state = ca.vertcat(
+        #     self.state.x.x,
+        #     self.state.x.y,
+        #     self.state.e.psi,
+        #     self.state.v.v,
+        #     self.state.u.u_steer,
+        # )
+        # input = ca.vertcat(self.pred.u_a[0], self.pred.u_steer_dot[0])
+        # zint = self.simulator(state, input)
+
+        # self.state.x.x = zint[0].__float__()
+        # self.state.x.y = zint[1].__float__()
+        # self.state.e.psi = zint[2].__float__()
+
+        # self.state.v.v = zint[3].__float__()
+        # self.state.u.u_steer = zint[4].__float__()
+
+        # ========= Directly using the RK4 model for simulation
         self.state.t += self.dt
         self.state.x.x = self.pred.x[1]
         self.state.x.y = self.pred.y[1]
@@ -493,12 +521,206 @@ class VehicleFollower(Vehicle):
         self.final_traj.u_steer_dot.append(self.state.u.u_steer_dot)
 
 
+class MultiDistributedFollower(object):
+    """
+    Multiple vehicles as distributed path followers
+    """
+
+    def __init__(
+        self,
+        rl_file_name: str,
+        spline_ws_config: Dict[str, bool],
+        colors: Dict[str, Tuple[float, float, float]],
+        init_offsets: Dict[str, VehicleState],
+    ) -> None:
+        self.rl_file_name = rl_file_name
+        self.spline_ws_config = spline_ws_config
+        self.colors = colors
+        self.init_offsets = init_offsets
+
+        self.vehicles: List[VehicleFollower] = []
+
+        self.agents = set(self.spline_ws_config.keys())
+
+        for agent in self.agents:
+
+            vehicle = VehicleFollower(
+                rl_file_name=rl_file_name,
+                agent=agent,
+                color=self.colors[agent],
+                init_offset=self.init_offsets[agent],
+            )
+
+            self.vehicles.append(vehicle)
+
+        self.rl_tubes = compute_sets(self.rl_file_name)
+        self.obstacles = compute_obstacles()
+
+        self.single_results: Dict[str, VehiclePrediction] = {}
+        self.final_results: Dict[str, VehiclePrediction] = {}
+
+    def setup_multi_vehicles(self):
+        """
+        set up multiple vehicle solvers
+        """
+        for v in self.vehicles:
+            v.plan_single_path(spline_ws=self.spline_ws_config[v.agent])
+            v.get_others(self.vehicles)
+            v.setup_controller()
+            v.get_current_ref()
+            self.single_results[v.agent] = v.reference_traj
+
+    def solve(self, num_iter: int = 500):
+        """
+        Solve the path following problem
+        """
+        print("Solving the path following problem...")
+        for _ in tqdm(range(num_iter)):
+            for v in self.vehicles:
+                v.get_others_pred()
+
+            for v in self.vehicles:
+                v.step()
+
+        for v in self.vehicles:
+            self.final_results[v.agent] = v.final_traj
+
+    def plot_results(self, interval: int = None):
+        """
+        Plot multi vehicle results
+        """
+        print("Plotting...")
+        if interval is None:
+            interval = int(
+                (
+                    self.final_results["vehicle_0"].t[1]
+                    - self.final_results["vehicle_0"].t[0]
+                )
+                * 1000
+            )
+
+        plt.figure()
+        static_vehicles = compute_static_vehicles()
+        parking_lines = compute_parking_lines()
+
+        for agent in self.agents:
+            ax = plt.subplot(2, 1, 1)
+            plt.plot(
+                self.single_results[agent].t,
+                self.single_results[agent].x,
+                label=agent + "_single",
+            )
+            plt.plot(
+                self.final_results[agent].t,
+                self.final_results[agent].x,
+                label=agent + "_final",
+            )
+            ax.set_ylabel("X (m)")
+            ax.legend()
+
+            ax = plt.subplot(2, 1, 2)
+            plt.plot(
+                self.single_results[agent].t,
+                self.single_results[agent].y,
+                label=agent + "_single",
+            )
+            plt.plot(
+                self.final_results[agent].t,
+                self.final_results[agent].y,
+                label=agent + "_final",
+            )
+            ax.set_ylabel("Y (m)")
+            ax.set_xlabel("Time (s)")
+            ax.legend()
+
+        plt.tight_layout()
+        plt.savefig(f"dist_follow_{self.rl_file_name}_XY_trace_single_vs_final.png")
+
+        plt.figure()
+        ax = plt.gca()
+        for obstalce in self.obstacles:
+            obstalce.plot(ax, facecolor="b", alpha=0.5)
+        for agent in self.agents:
+            plt.plot(
+                self.final_results[agent].x,
+                self.final_results[agent].y,
+                color=self.colors[agent]["front"],
+                label=agent,
+            )
+        plt.axis("equal")
+        plt.savefig(f"dist_follow_{self.rl_file_name}_XY_final_traj.png")
+
+        plt.figure()
+        for v in self.vehicles:
+            plt.plot(v.reference_traj.x, v.reference_traj.y, color="b")
+            plt.plot(v.final_traj.x, v.final_traj.y, "--r")
+            for pair in v.ref_pair:
+                plt.plot(pair[:, 0], pair[:, 1], color="g", linewidth=0.25)
+
+        plt.axis("equal")
+        plt.savefig(f"dist_follow_{self.rl_file_name}_ref_vs_final.png")
+
+        print("Generating animation...")
+        fig = plt.figure()
+        ax = plt.gca()
+
+        def plot_frame(i):
+            ax.clear()
+            for obstacle in self.obstacles:
+                obstacle.plot(ax, facecolor=(0 / 255, 128 / 255, 255 / 255))
+            for obstacle in static_vehicles:
+                obstacle.plot(ax, fill=False, edgecolor="k", hatch="///")
+            for line in parking_lines:
+                plt.plot(line[:, 0], line[:, 1], "k--", linewidth=1)
+
+            for j, agent in enumerate(sorted(self.agents)):
+                ax.plot(
+                    self.final_results[agent].x,
+                    self.final_results[agent].y,
+                    color=self.colors[agent]["front"],
+                    label=agent,
+                    zorder=j,
+                )
+                plot_car(
+                    self.final_results[agent].x[i],
+                    self.final_results[agent].y[i],
+                    self.final_results[agent].psi[i],
+                    VehicleBody(),
+                    text=j,
+                    zorder=10 + j,
+                )
+            ax.axis("off")
+            ax.set_aspect("equal")
+            ax.legend(
+                loc="upper right",
+                bbox_to_anchor=(0.96, 0.97),
+                fontsize="large",
+            )
+            plt.tight_layout()
+
+        ani = FuncAnimation(
+            fig,
+            plot_frame,
+            frames=len(self.final_results["vehicle_0"].t),
+            interval=interval,
+            repeat=True,
+        )
+
+        fps = int(1000 / interval)
+        writer = FFMpegWriter(fps=fps)
+
+        animation_filename = f"dist_follow_{self.rl_file_name}_{fps}fps_animation.mp4"
+        ani.save(animation_filename, writer=writer)
+        print(f"Animation saves as: {animation_filename}")
+
+        plt.show()
+
+
 def main():
     """
     main
     """
     rl_file_name = "4v_rl_traj"
-    agent = "vehicle_0"
 
     spline_ws_config = {
         "vehicle_0": False,
@@ -514,44 +736,34 @@ def main():
         "vehicle_3": VehicleState(),
     }
 
-    vehicles: List[VehicleFollower] = []
+    colors = {
+        "vehicle_0": {
+            "front": (255 / 255, 119 / 255, 0),
+            "back": (128 / 255, 60 / 255, 0),
+        },
+        "vehicle_1": {
+            "front": (0, 255 / 255, 212 / 255),
+            "back": (0, 140 / 255, 117 / 255),
+        },
+        "vehicle_2": {
+            "front": (164 / 255, 164 / 255, 164 / 255),
+            "back": (64 / 255, 64 / 255, 64 / 255),
+        },
+        "vehicle_3": {
+            "front": (255 / 255, 0, 149 / 255),
+            "back": (128 / 255, 0, 74 / 255),
+        },
+    }
 
-    for agent in spline_ws_config.keys():
-
-        vehicle = VehicleFollower(
-            rl_file_name=rl_file_name,
-            agent=agent,
-            color={"front": (1, 0, 0), "back": (0, 1, 0)},
-            init_offset=init_offsets[agent],
-        )
-
-        vehicles.append(vehicle)
-
-    for v in vehicles:
-        v.plan_single_path(spline_ws=spline_ws_config[v.agent])
-        v.get_others(vehicles)
-        v.setup_controller()
-        v.get_current_ref()
-
-    for _ in tqdm(range(500)):
-        for v in vehicles:
-            v.get_others_pred()
-
-        for v in vehicles:
-            v.step()
-
-    for v in vehicles:
-        plt.figure()
-        ax1 = plt.subplot(1, 2, 1)
-        ax1.plot(v.reference_traj.x, v.reference_traj.y, color="b")
-        ax1.plot(v.final_traj.x, v.final_traj.y, "--r")
-        for pair in v.ref_pair:
-            ax1.plot(pair[:, 0], pair[:, 1], color="g", linewidth=0.25)
-
-        ax2 = plt.subplot(1, 2, 2)
-        ax2.plot(v.final_traj.t, v.final_traj.v)
-
-    plt.show()
+    multi_follower = MultiDistributedFollower(
+        rl_file_name=rl_file_name,
+        spline_ws_config=spline_ws_config,
+        colors=colors,
+        init_offsets=init_offsets,
+    )
+    multi_follower.setup_multi_vehicles()
+    multi_follower.solve()
+    multi_follower.plot_results()
 
 
 if __name__ == "__main__":
