@@ -617,31 +617,33 @@ class MultiDistributedFollower(object):
         static_vehicles = compute_static_vehicles()
         parking_lines = compute_parking_lines()
 
-        for agent in self.agents:
+        for agent in sorted(self.agents):
             ax = plt.subplot(2, 1, 1)
-            plt.plot(
-                self.single_results[agent].t,
-                self.single_results[agent].x,
-                label=agent + "_single",
-            )
             plt.plot(
                 self.final_results[agent].t,
                 self.final_results[agent].x,
                 label=agent + "_final",
+            )
+            plt.plot(
+                self.single_results[agent].t,
+                self.single_results[agent].x,
+                "--",
+                label=agent + "_single",
             )
             ax.set_ylabel("X (m)")
             ax.legend()
 
             ax = plt.subplot(2, 1, 2)
             plt.plot(
-                self.single_results[agent].t,
-                self.single_results[agent].y,
-                label=agent + "_single",
-            )
-            plt.plot(
                 self.final_results[agent].t,
                 self.final_results[agent].y,
                 label=agent + "_final",
+            )
+            plt.plot(
+                self.single_results[agent].t,
+                self.single_results[agent].y,
+                "--",
+                label=agent + "_single",
             )
             ax.set_ylabel("Y (m)")
             ax.set_xlabel("Time (s)")
