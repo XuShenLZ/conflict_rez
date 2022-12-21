@@ -2,6 +2,7 @@ from typing import Dict, Tuple, List
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, FFMpegWriter
+import time
 
 from tqdm import tqdm
 
@@ -556,6 +557,8 @@ class MultiDistributedFollower(object):
         self.rl_tubes = compute_sets(self.rl_file_name)
         self.obstacles = compute_obstacles()
 
+        self.iter_time = []
+
         self.single_results: Dict[str, VehiclePrediction] = {}
         self.final_results: Dict[str, VehiclePrediction] = {}
 
@@ -576,11 +579,16 @@ class MultiDistributedFollower(object):
         """
         print("Solving the path following problem...")
         for _ in tqdm(range(num_iter)):
+            start_time = time.time()
             for v in self.vehicles:
                 v.get_others_pred()
 
             for v in self.vehicles:
                 v.step()
+
+            self.iter_time.append((time.time() - start_time) / len(self.vehicles))
+
+        print(f"Mean iteration time = {np.mean(self.iter_time)}")
 
         for v in self.vehicles:
             self.final_results[v.agent] = v.final_traj
@@ -598,6 +606,12 @@ class MultiDistributedFollower(object):
                 )
                 * 1000
             )
+
+        plt.figure()
+        plt.hist(self.iter_time, 100)
+        plt.title("Iteration time of all vehicles")
+        plt.xlabel("Time (s)")
+        plt.tight_layout()
 
         plt.figure()
         static_vehicles = compute_static_vehicles()
