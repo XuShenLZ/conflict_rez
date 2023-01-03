@@ -55,7 +55,7 @@ class VehicleFollower(Vehicle):
 
         self.pred: VehiclePrediction = None
 
-        self.others: Dict[VehicleFollower] = {}
+        self.others: Dict[str] = {}
         self.others_pred: Dict[str, VehiclePrediction] = {}
 
         self.reference_traj: VehiclePrediction = None
@@ -120,11 +120,11 @@ class VehicleFollower(Vehicle):
         self.reference_traj = self.interpolate_states(interp_time)
         self.reference_xy = np.vstack([self.reference_traj.x, self.reference_traj.y]).T
 
-    def get_others(self, others: List[Vehicle]):
+    def get_others(self, vehicles: List[Vehicle]):
         """
         get other vehicles
         """
-        self.others = [v for v in others if v.agent != self.agent]
+        self.others = [v.agent for v in vehicles if v.agent != self.agent]
 
     def setup_controller(self, dt: float = 0.05, N: int = 30, dmin=0.05):
         """
@@ -283,8 +283,7 @@ class VehicleFollower(Vehicle):
         self.opt_lambda_ji: Dict[str, np.ndarray] = {}
         self.opt_s: Dict[str, np.ndarray] = {}
 
-        for v in self.others:
-            other = v.agent
+        for other in self.others:
 
             self.p_other_pred[other] = {
                 "x": self.opti.parameter(N),
@@ -387,11 +386,11 @@ class VehicleFollower(Vehicle):
 
         return result
 
-    def get_others_pred(self):
+    def get_others_pred(self, vehicles: List[Vehicle]):
         """
         get others open-loop prediction
         """
-        for v in self.others:
+        for v in vehicles:
             self.others_pred[v.agent] = v.pred.copy()
 
     def _adv_onestep(self, array: np.ndarray):
@@ -425,29 +424,27 @@ class VehicleFollower(Vehicle):
         self.opti.set_value(self.current_ref_y, current_ref.y)
         self.opti.set_value(self.current_ref_psi, current_ref.psi)
 
-        for v in self.others:
+        for other in self.others:
             self.opti.set_value(
-                self.p_other_pred[v.agent]["x"],
-                self._adv_onestep(self.others_pred[v.agent].x),
+                self.p_other_pred[other]["x"],
+                self._adv_onestep(self.others_pred[other].x),
             )
             self.opti.set_value(
-                self.p_other_pred[v.agent]["y"],
-                self._adv_onestep(self.others_pred[v.agent].y),
+                self.p_other_pred[other]["y"],
+                self._adv_onestep(self.others_pred[other].y),
             )
             self.opti.set_value(
-                self.p_other_pred[v.agent]["psi"],
-                self._adv_onestep(self.others_pred[v.agent].psi),
+                self.p_other_pred[other]["psi"],
+                self._adv_onestep(self.others_pred[other].psi),
             )
 
             self.opti.set_initial(
-                self.lambda_ij[v.agent], self._adv_onestep(self.opt_lambda_ij[v.agent])
+                self.lambda_ij[other], self._adv_onestep(self.opt_lambda_ij[other])
             )
             self.opti.set_initial(
-                self.lambda_ji[v.agent], self._adv_onestep(self.opt_lambda_ji[v.agent])
+                self.lambda_ji[other], self._adv_onestep(self.opt_lambda_ji[other])
             )
-            self.opti.set_initial(
-                self.s[v.agent], self._adv_onestep(self.opt_s[v.agent])
-            )
+            self.opti.set_initial(self.s[other], self._adv_onestep(self.opt_s[other]))
 
         self.opti.set_initial(self.x, self._adv_onestep(self.pred.x))
         self.opti.set_initial(self.y, self._adv_onestep(self.pred.y))
@@ -477,10 +474,10 @@ class VehicleFollower(Vehicle):
         self.pred.l = sol.value(self.l)
         self.pred.m = sol.value(self.m)
 
-        for v in self.others:
-            self.opt_lambda_ij[v.agent] = sol.value(self.lambda_ij[v.agent])
-            self.opt_lambda_ji[v.agent] = sol.value(self.lambda_ji[v.agent])
-            self.opt_s[v.agent] = sol.value(self.s[v.agent])
+        for other in self.others:
+            self.opt_lambda_ij[other] = sol.value(self.lambda_ij[other])
+            self.opt_lambda_ji[other] = sol.value(self.lambda_ji[other])
+            self.opt_s[other] = sol.value(self.s[other])
 
         # ======== Using Casadi integrator for simulation, might lead to solver failure now
         # state = ca.vertcat(
@@ -581,7 +578,7 @@ class MultiDistributedFollower(object):
         for _ in tqdm(range(num_iter)):
             start_time = time.time()
             for v in self.vehicles:
-                v.get_others_pred()
+                v.get_others_pred(self.vehicles)
 
             for v in self.vehicles:
                 v.step()
