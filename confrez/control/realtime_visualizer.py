@@ -34,6 +34,9 @@ class RealtimeVisualizer(object):
         )
         self.draw_background()
 
+    def __del__(self):
+        self.close()
+
     def g2i(self, x: int, y: int) -> Tuple[int, int]:
         """
         convert right-hand grid indices to its top-left vertex pixel coordinates
@@ -68,6 +71,12 @@ class RealtimeVisualizer(object):
 
         pygame.draw.polygon(self.screen, (255, 0, 0), np.vstack([px, py]).T)
 
+    def render(self):
+        """
+        render current frame
+        """
+        pygame.display.flip()
+
     def test_draw(self):
         """
         draw update
@@ -75,7 +84,7 @@ class RealtimeVisualizer(object):
         state = VehicleState()
         state.x.x = 5
         state.x.y = 10
-        state.q.from_yaw(np.pi / 6)
+        state.e.psi = np.pi / 6
         for i in range(25):
             self.draw_background()
             self.draw_obstacles()
@@ -83,7 +92,7 @@ class RealtimeVisualizer(object):
             state.x.x += 1
             self.draw_car(state)
 
-            pygame.display.flip()
+            self.render()
 
             time.sleep(0.05)
 

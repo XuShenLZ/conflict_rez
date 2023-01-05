@@ -16,6 +16,7 @@ from confrez.control.compute_sets import (
 )
 
 from confrez.control.dynamic_model import kinematic_bicycle_rk, simulator
+from confrez.control.realtime_visualizer import RealtimeVisualizer
 from confrez.obstacle_types import GeofenceRegion
 from confrez.vehicle_types import VehicleBody, VehicleConfig
 from confrez.control.vehicle import Vehicle
@@ -38,6 +39,7 @@ class VehicleFollower(Vehicle):
         agent: str,
         color: Dict[str, Tuple[float, float, float]],
         init_offset: VehicleState,
+        final_heading: float,
         vehicle_config: VehicleConfig = VehicleConfig(),
         vehicle_body: VehicleBody = VehicleBody(),
         region: GeofenceRegion = GeofenceRegion(),
@@ -46,6 +48,7 @@ class VehicleFollower(Vehicle):
             rl_file_name, agent, color, vehicle_config, vehicle_body, region
         )
         self.init_offset = init_offset
+        self.final_heading = final_heading
 
         self.state: VehicleState = self.init_state
         self.state.t = 0
@@ -91,6 +94,7 @@ class VehicleFollower(Vehicle):
             N=N_ws,
             dt=dt_ws,
             init_offset=self.init_offset,
+            final_heading=self.final_heading,
             shrink_tube=shrink_tube,
             spline_ws=spline_ws,
         )
@@ -101,6 +105,7 @@ class VehicleFollower(Vehicle):
         self.setup_single_final_problem(
             zu0=zu0,
             init_offset=self.init_offset,
+            final_heading=self.final_heading,
             K=K,
             N_per_set=N_per_set,
             shrink_tube=shrink_tube,
@@ -530,11 +535,13 @@ class MultiDistributedFollower(object):
         spline_ws_config: Dict[str, bool],
         colors: Dict[str, Tuple[float, float, float]],
         init_offsets: Dict[str, VehicleState],
+        final_headings: Dict[str, float],
     ) -> None:
         self.rl_file_name = rl_file_name
         self.spline_ws_config = spline_ws_config
         self.colors = colors
         self.init_offsets = init_offsets
+        self.final_headings = final_headings
 
         self.vehicles: List[VehicleFollower] = []
 
@@ -547,6 +554,7 @@ class MultiDistributedFollower(object):
                 agent=agent,
                 color=self.colors[agent],
                 init_offset=self.init_offsets[agent],
+                final_heading=self.final_headings[agent],
             )
 
             self.vehicles.append(vehicle)
@@ -558,6 +566,8 @@ class MultiDistributedFollower(object):
 
         self.single_results: Dict[str, VehiclePrediction] = {}
         self.final_results: Dict[str, VehiclePrediction] = {}
+
+        self.vis = RealtimeVisualizer(vehicle_body=VehicleBody())
 
     def setup_multi_vehicles(self):
         """
@@ -584,6 +594,12 @@ class MultiDistributedFollower(object):
                 v.step()
 
             self.iter_time.append((time.time() - start_time) / len(self.vehicles))
+
+            self.vis.draw_background()
+            self.vis.draw_obstacles()
+            for v in self.vehicles:
+                self.vis.draw_car(v.state)
+            self.vis.render()
 
         print(f"Mean iteration time = {np.mean(self.iter_time)}")
 
@@ -749,6 +765,13 @@ def main():
         "vehicle_3": VehicleState(),
     }
 
+    final_headings = {
+        "vehicle_0": 0,
+        "vehicle_1": 3 * np.pi / 2,
+        "vehicle_2": np.pi,
+        "vehicle_3": np.pi / 2,
+    }
+
     colors = {
         "vehicle_0": {
             "front": (255 / 255, 119 / 255, 0),
@@ -773,10 +796,11 @@ def main():
         spline_ws_config=spline_ws_config,
         colors=colors,
         init_offsets=init_offsets,
+        final_headings=final_headings,
     )
     multi_follower.setup_multi_vehicles()
     multi_follower.solve()
-    multi_follower.plot_results()
+    # multi_follower.plot_results()
 
 
 if __name__ == "__main__":

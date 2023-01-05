@@ -33,6 +33,7 @@ class MultiVehiclePlanner(object):
         ws_config: Dict[str, bool],
         colors: Dict[str, Tuple[float, float, float]],
         init_offsets: Dict[str, VehicleState],
+        final_headings: Dict[str, float],
         vehicle_body: VehicleBody = VehicleBody(),
         vehicle_config: VehicleConfig = VehicleConfig(),
         region: GeofenceRegion = GeofenceRegion(),
@@ -41,6 +42,7 @@ class MultiVehiclePlanner(object):
         self.ws_config = ws_config
         self.colors = colors
         self.init_offsets = init_offsets
+        self.final_headings = final_headings
         self.vehicle_body = vehicle_body
         self.vehicle_config = vehicle_config
         self.region = region
@@ -85,6 +87,7 @@ class MultiVehiclePlanner(object):
                 N=N,
                 dt=dt,
                 init_offset=self.init_offsets[agent],
+                final_heading=self.final_headings[agent],
                 shrink_tube=shrink_tube,
                 spline_ws=self.ws_config[agent],
             )
@@ -95,6 +98,7 @@ class MultiVehiclePlanner(object):
             vehicle.setup_single_final_problem(
                 zu0=zu0,
                 init_offset=self.init_offsets[agent],
+                final_heading=self.final_headings[agent],
                 K=K,
                 N_per_set=N_per_set,
                 shrink_tube=shrink_tube,
@@ -370,6 +374,7 @@ class MultiVehiclePlanner(object):
             vehicle.setup_single_final_problem(
                 zu0=self.single_results[agent],
                 init_offset=self.init_offsets[agent],
+                final_heading=self.final_headings[agent],
                 opti=opti,
                 dt=dt,
                 K=K,
@@ -634,11 +639,19 @@ def main():
         "vehicle_3": VehicleState(),
     }
 
+    final_headings = {
+        "vehicle_0": 0,
+        "vehicle_1": 3 * np.pi / 2,
+        "vehicle_2": np.pi,
+        "vehicle_3": np.pi / 2,
+    }
+
     planner = MultiVehiclePlanner(
         rl_file_name=rl_file_name,
         ws_config=ws_config,
         colors=colors,
         init_offsets=init_offsets,
+        final_headings=final_headings,
     )
 
     planner.solve_single_problems(
