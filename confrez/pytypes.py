@@ -403,7 +403,9 @@ class VehicleState(PythonMsg):
 
     def get_R(self, reverse=False):
         # Warning - Not suitable for general 3D case
-        psi = self.psi
+        psi = self.q.to_yaw()
+        if reverse:
+            psi *= -1
         return np.array(
             [[np.cos(psi), -np.sin(psi), 0], [np.sin(psi), np.cos(psi), 0], [0, 0, 0]]
         )
