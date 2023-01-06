@@ -9,8 +9,8 @@ import pygame
 from gym.utils import EzPickle, seeding
 
 from pettingzoo import ParallelEnv
-from pettingzoo.utils import wrappers, parallel_to_aec
-
+from pettingzoo.utils import wrappers 
+from pettingzoo.utils import parallel_to_aec as parallel_to_aec
 FPS = 5
 
 

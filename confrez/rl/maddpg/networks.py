@@ -15,6 +15,8 @@ class CriticNetwork(nn.Module):
         self.fc1 = nn.Linear(input_dims+n_agents*n_actions, fc1_dims)
         self.fc2 = nn.Linear(fc1_dims, fc2_dims)
         self.q = nn.Linear(fc2_dims, 1)
+        # dtype error wrt torch version
+        self.double()
 
         self.optimizer = optim.Adam(self.parameters(), lr=beta)
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
@@ -22,7 +24,8 @@ class CriticNetwork(nn.Module):
         self.to(self.device)
 
     def forward(self, state, action):
-        x = F.relu(self.fc1(T.cat([state, action], dim=1)))
+        T.autograd.set_detect_anomaly(True)
+        x = F.relu(self.fc1(T.cat([state.double(), action.double()], dim=1)))
         x = F.relu(self.fc2(x))
         q = self.q(x)
 
@@ -45,6 +48,7 @@ class ActorNetwork(nn.Module):
         self.fc1 = nn.Linear(input_dims, fc1_dims)
         self.fc2 = nn.Linear(fc1_dims, fc2_dims)
         self.pi = nn.Linear(fc2_dims, n_actions)
+        self.double()
 
         self.optimizer = optim.Adam(self.parameters(), lr=alpha)
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
@@ -52,11 +56,13 @@ class ActorNetwork(nn.Module):
         self.to(self.device)
 
     def forward(self, state):
-        x = F.relu(self.fc1(state))
+        #debug
+        # T.autograd.set_detect_anomaly(True)
+        x = F.relu(self.fc1(state.double()))
         x = F.relu(self.fc2(x))
-        pi = T.softmax(self.pi(x), dim=1)
+        p = F.softmax(self.pi(x), dim = 1)
 
-        return pi
+        return p
 
     def save_checkpoint(self):
         T.save(self.state_dict(), self.chkpt_file)

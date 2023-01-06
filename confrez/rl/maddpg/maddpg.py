@@ -52,39 +52,41 @@ class MADDPG:
         all_agents_new_actions = []
         all_agents_new_mu_actions = []
         old_agents_actions = []
-
+        print("numagents:",len(self.agents))
         for agent_idx, agent in enumerate(self.agents):
             new_states = T.tensor(actor_new_states[agent_idx], 
-                                 dtype=T.float).to(device)
-
+                                 dtype=T.double).to(device)
             new_pi = agent.target_actor.forward(new_states)
 
             all_agents_new_actions.append(new_pi)
             mu_states = T.tensor(actor_states[agent_idx], 
-                                 dtype=T.float).to(device)
+                                 dtype=T.double).to(device)
             pi = agent.actor.forward(mu_states)
             all_agents_new_mu_actions.append(pi)
             old_agents_actions.append(actions[agent_idx])
+            print(agent_idx)
 
         new_actions = T.cat([acts for acts in all_agents_new_actions], dim=1)
         mu = T.cat([acts for acts in all_agents_new_mu_actions], dim=1)
         old_actions = T.cat([acts for acts in old_agents_actions],dim=1)
 
         for agent_idx, agent in enumerate(self.agents):
+            #debug
+            # T.autograd.set_detect_anomaly(True)
             critic_value_ = agent.target_critic.forward(states_, new_actions).flatten()
             critic_value_[dones[:,0]] = 0.0
             critic_value = agent.critic.forward(states, old_actions).flatten()
 
             target = rewards[:,agent_idx] + agent.gamma*critic_value_
-            critic_loss = F.mse_loss(target, critic_value)
-            agent.critic.optimizer.zero_grad()
+            critic_loss = F.mse_loss(target, critic_value).double()
             critic_loss.backward(retain_graph=True)
+            agent.critic.optimizer.zero_grad()
             agent.critic.optimizer.step()
 
-            actor_loss = agent.critic.forward(states, mu).flatten()
-            actor_loss = -T.mean(actor_loss)
-            agent.actor.optimizer.zero_grad()
+            actor_value = agent.critic.forward(states, mu).flatten().double()
+            actor_loss = -T.mean(actor_value)
             actor_loss.backward(retain_graph=True)
+            agent.actor.optimizer.zero_grad()
             agent.actor.optimizer.step()
 
             agent.update_network_parameters()
