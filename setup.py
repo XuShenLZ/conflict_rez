@@ -19,6 +19,7 @@ setuptools.setup(
         "stable-baselines3[extra]",
         "supersuit",
         "pygame",
+        "pyyaml",
     ],
     # install pytorch according to CUDA version / CPU
 )

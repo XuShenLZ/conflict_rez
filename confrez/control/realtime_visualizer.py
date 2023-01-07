@@ -4,7 +4,7 @@ import pygame
 import numpy as np
 from confrez.control.compute_sets import compute_obstacles
 
-from confrez.pytypes import VehicleState
+from confrez.pytypes import VehiclePrediction, VehicleState
 from confrez.vehicle_types import VehicleBody
 
 
@@ -60,7 +60,14 @@ class RealtimeVisualizer(object):
 
             pygame.draw.polygon(self.screen, (0, 125, 255), points)
 
-    def draw_car(self, state: VehicleState):
+    def draw_traj(
+        self, traj: VehiclePrediction, color: Tuple[int, int, int] = (0, 0, 0)
+    ):
+        px, py = self.g2i(np.array(traj.x), np.array(traj.y))
+
+        pygame.draw.lines(self.screen, color, False, np.vstack([px, py]).T)
+
+    def draw_car(self, state: VehicleState, color: Tuple[int, int, int] = (0, 0, 0)):
         """
         draw a moving car
         """
@@ -69,7 +76,7 @@ class RealtimeVisualizer(object):
 
         px, py = self.g2i(car_outline[:, 0], car_outline[:, 1])
 
-        pygame.draw.polygon(self.screen, (255, 0, 0), np.vstack([px, py]).T)
+        pygame.draw.polygon(self.screen, color, np.vstack([px, py]).T)
 
     def render(self):
         """
@@ -114,7 +121,7 @@ def main():
 
     time.sleep(2)
 
-    vis.close()
+    # vis.close()
 
 
 if __name__ == "__main__":

@@ -463,26 +463,47 @@ class VehicleFollower(Vehicle):
         self.opti.set_initial(self.l, self._adv_onestep(self.pred.l))
         self.opti.set_initial(self.m, self._adv_onestep(self.pred.m))
 
-        sol = self.opti.solve()
-        # print(sol.stats()["return_status"])
+        try:
+            sol = self.opti.solve()
+            # print(sol.stats()["return_status"])
 
-        self.pred.x = sol.value(self.x)
-        self.pred.y = sol.value(self.y)
-        self.pred.psi = sol.value(self.psi)
+            self.pred.x = sol.value(self.x)
+            self.pred.y = sol.value(self.y)
+            self.pred.psi = sol.value(self.psi)
 
-        self.pred.v = sol.value(self.v)
-        self.pred.u_steer = sol.value(self.delta)
+            self.pred.v = sol.value(self.v)
+            self.pred.u_steer = sol.value(self.delta)
 
-        self.pred.u_a = sol.value(self.a)
-        self.pred.u_steer_dot = sol.value(self.w)
+            self.pred.u_a = sol.value(self.a)
+            self.pred.u_steer_dot = sol.value(self.w)
 
-        self.pred.l = sol.value(self.l)
-        self.pred.m = sol.value(self.m)
+            self.pred.l = sol.value(self.l)
+            self.pred.m = sol.value(self.m)
 
-        for other in self.others:
-            self.opt_lambda_ij[other] = sol.value(self.lambda_ij[other])
-            self.opt_lambda_ji[other] = sol.value(self.lambda_ji[other])
-            self.opt_s[other] = sol.value(self.s[other])
+            for other in self.others:
+                self.opt_lambda_ij[other] = sol.value(self.lambda_ij[other])
+                self.opt_lambda_ji[other] = sol.value(self.lambda_ji[other])
+                self.opt_s[other] = sol.value(self.s[other])
+        except:
+            print("=========================================")
+            print("======== Warning: Solving failed ========")
+            self.pred.x = self._adv_onestep(self.pred.x)
+            self.pred.y = self._adv_onestep(self.pred.y)
+            self.pred.psi = self._adv_onestep(self.pred.psi)
+
+            self.pred.v = self._adv_onestep(self.pred.v)
+            self.pred.u_steer = self._adv_onestep(self.pred.u_steer)
+
+            self.pred.u_a = self._adv_onestep(self.pred.u_a)
+            self.pred.u_steer_dot = self._adv_onestep(self.pred.u_steer_dot)
+
+            self.pred.l = self._adv_onestep(self.pred.l)
+            self.pred.m = self._adv_onestep(self.pred.m)
+
+            for other in self.others:
+                self.opt_lambda_ij[other] = self._adv_onestep(self.opt_lambda_ij[other])
+                self.opt_lambda_ji[other] = self._adv_onestep(self.opt_lambda_ji[other])
+                self.opt_s[other] = self._adv_onestep(self.opt_s[other])
 
         # ======== Using Casadi integrator for simulation, might lead to solver failure now
         # state = ca.vertcat(
@@ -568,6 +589,8 @@ class MultiDistributedFollower(object):
         self.final_results: Dict[str, VehiclePrediction] = {}
 
         self.vis = RealtimeVisualizer(vehicle_body=VehicleBody())
+        self.vis.draw_background()
+        self.vis.draw_obstacles()
 
     def setup_multi_vehicles(self):
         """
@@ -598,7 +621,8 @@ class MultiDistributedFollower(object):
             self.vis.draw_background()
             self.vis.draw_obstacles()
             for v in self.vehicles:
-                self.vis.draw_car(v.state)
+                self.vis.draw_traj(v.final_traj, 255 * np.array(v.color["front"]))
+                self.vis.draw_car(v.state, 255 * np.array(v.color["front"]))
             self.vis.render()
 
         print(f"Mean iteration time = {np.mean(self.iter_time)}")
