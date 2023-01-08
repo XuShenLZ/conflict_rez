@@ -43,6 +43,7 @@ class VehicleFollower(Vehicle):
         vehicle_config: VehicleConfig = VehicleConfig(),
         vehicle_body: VehicleBody = VehicleBody(),
         region: GeofenceRegion = GeofenceRegion(),
+        printer: callable = None,
     ) -> None:
         super().__init__(
             rl_file_name, agent, color, vehicle_config, vehicle_body, region
@@ -57,6 +58,8 @@ class VehicleFollower(Vehicle):
         self.state.e.psi += self.init_offset.e.psi
 
         self.pred: VehiclePrediction = None
+
+        self.back_up_steps: int = 0
 
         self.others: Dict[str] = {}
         self.others_pred: Dict[str, VehiclePrediction] = {}
@@ -75,6 +78,11 @@ class VehicleFollower(Vehicle):
         self.final_traj.u_steer = [self.state.u.u_steer]
         self.final_traj.u_a = [self.state.u.u_a]
         self.final_traj.u_steer_dot = [self.state.u.u_steer_dot]
+
+        if printer is None:
+            self.print = print
+        else:
+            self.print = printer
 
     def plan_single_path(
         self,
@@ -135,7 +143,7 @@ class VehicleFollower(Vehicle):
         """
         setup the predictive controller
         """
-        print(f"setting up controller for {self.agent}...")
+        self.print(f"setting up controller for {self.agent}...")
 
         n_obs = len(self.obstacles)
 
@@ -466,6 +474,7 @@ class VehicleFollower(Vehicle):
         try:
             sol = self.opti.solve()
             # print(sol.stats()["return_status"])
+            self.back_up_steps = self.N - 1
 
             self.pred.x = sol.value(self.x)
             self.pred.y = sol.value(self.y)
@@ -485,8 +494,11 @@ class VehicleFollower(Vehicle):
                 self.opt_lambda_ji[other] = sol.value(self.lambda_ji[other])
                 self.opt_s[other] = sol.value(self.s[other])
         except:
-            print("=========================================")
-            print("======== Warning: Solving failed ========")
+            self.print(
+                f"=== Solving failed, {self.back_up_steps} remaining backup steps. ====="
+            )
+            self.back_up_steps -= 1
+
             self.pred.x = self._adv_onestep(self.pred.x)
             self.pred.y = self._adv_onestep(self.pred.y)
             self.pred.psi = self._adv_onestep(self.pred.psi)
@@ -566,7 +578,7 @@ class MultiDistributedFollower(object):
 
         self.vehicles: List[VehicleFollower] = []
 
-        self.agents = set(self.spline_ws_config.keys())
+        self.agents = sorted(self.spline_ws_config.keys())
 
         for agent in self.agents:
 
@@ -597,6 +609,7 @@ class MultiDistributedFollower(object):
         set up multiple vehicle solvers
         """
         for v in self.vehicles:
+            self.print(f"======= {v.agent} =======")
             v.plan_single_path(spline_ws=self.spline_ws_config[v.agent])
             v.get_others(self.vehicles)
             v.setup_controller()
@@ -607,7 +620,7 @@ class MultiDistributedFollower(object):
         """
         Solve the path following problem
         """
-        print("Solving the path following problem...")
+        self.print("Solving the path following problem...")
         for _ in tqdm(range(num_iter)):
             start_time = time.time()
             for v in self.vehicles:
@@ -625,7 +638,7 @@ class MultiDistributedFollower(object):
                 self.vis.draw_car(v.state, 255 * np.array(v.color["front"]))
             self.vis.render()
 
-        print(f"Mean iteration time = {np.mean(self.iter_time)}")
+        self.print(f"Mean iteration time = {np.mean(self.iter_time)}")
 
         for v in self.vehicles:
             self.final_results[v.agent] = v.final_traj
@@ -634,7 +647,7 @@ class MultiDistributedFollower(object):
         """
         Plot multi vehicle results
         """
-        print("Plotting...")
+        self.print("Plotting...")
         if interval is None:
             interval = int(
                 (
@@ -713,7 +726,7 @@ class MultiDistributedFollower(object):
         plt.axis("equal")
         plt.savefig(f"dist_follow_{self.rl_file_name}_ref_vs_final.png")
 
-        print("Generating animation...")
+        self.print("Generating animation...")
         fig = plt.figure()
         ax = plt.gca()
 
@@ -764,7 +777,7 @@ class MultiDistributedFollower(object):
 
         animation_filename = f"dist_follow_{self.rl_file_name}_{fps}fps_animation.mp4"
         ani.save(animation_filename, writer=writer)
-        print(f"Animation saves as: {animation_filename}")
+        self.print(f"Animation saves as: {animation_filename}")
 
         plt.show()
 
@@ -788,6 +801,9 @@ def main():
         "vehicle_2": VehicleState(),
         "vehicle_3": VehicleState(),
     }
+    # init_offsets["vehicle_0"].x.x = 0.1
+    # init_offsets["vehicle_0"].x.y = 0.1
+    # init_offsets["vehicle_0"].e.psi = np.pi / 20
 
     final_headings = {
         "vehicle_0": 0,
@@ -795,6 +811,13 @@ def main():
         "vehicle_2": np.pi,
         "vehicle_3": np.pi / 2,
     }
+
+    # final_headings = {
+    #     "vehicle_0": None,
+    #     "vehicle_1": None,
+    #     "vehicle_2": None,
+    #     "vehicle_3": None,
+    # }
 
     colors = {
         "vehicle_0": {

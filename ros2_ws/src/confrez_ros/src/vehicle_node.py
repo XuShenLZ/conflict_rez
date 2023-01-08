@@ -104,6 +104,7 @@ class VehicleNode(MPClabNode):
             color=self.color,
             init_offset=VehicleState(),
             final_heading=self.final_heading,
+            printer=self.get_logger().info,
         )
 
         # ======== Publishers, Subscribers, Services
