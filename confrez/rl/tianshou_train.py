@@ -6,56 +6,41 @@ import supersuit as ss
 from datetime import datetime
 from os import path as os_path
 import torch
-import gym
 import numpy as np
-from torch.utils.tensorboard import SummaryWriter
+
 from tianshou.data import Collector, VectorReplayBuffer
 from tianshou.env import DummyVectorEnv, PettingZooEnv
 
-from pettingzoo.classic import tictactoe_v3
 from tianshou.policy import (
     BasePolicy,
     DQNPolicy,
-    MultiAgentPolicyManager,
-    RandomPolicy,
+    MultiAgentPolicyManager
 )
 from tianshou.trainer import offpolicy_trainer
 from tianshou.utils.net.common import Net
-
-# import wandb
-# from wandb.integration.sb3 import WandbCallback
-# run = wandb.init(project="rl-parking", 
-#                 entity="chengtianyue",
-#                 monitor_gym=True,
-#                 sync_tensorboard=True
-#                 )
 
 cwd = os_path.dirname(__file__)
 now = datetime.now()
 timestamp = now.strftime("%m-%d-%Y_%H-%M-%S")
 
-MODEL_NAME = "Tianshou-multiagent"
-# LOG_DIR = "./log_for_wandb/"
+MODEL_NAME = "Tianshou-Multiagent"
 NUM_AGENT = 4
 
 def get_env():
     """This function is needed to provide callables for DummyVectorEnv."""
-    env = parallel_env(n_vehicles=4, seed=1, random_reset=False)
+    env = pklot_env.raw_env(n_vehicles=4, seed=1, random_reset=False)
     env = ss.black_death_v3(env)
     env = ss.resize_v1(env, 140, 140)
     return PettingZooEnv(env)
 
 def get_agents(
-    agent_learn: Optional[BasePolicy] = None,
-    agent_opponent: Optional[BasePolicy] = None,
     optim: Optional[torch.optim.Optimizer] = None,
 ) -> Tuple[BasePolicy, torch.optim.Optimizer, list]:
     env = get_env()
-    observation_space = env.observation_space
     agents = []
     for _ in range(NUM_AGENT):
         net = Net(
-            state_shape= len(observation_space),
+            state_shape=58800,
             action_shape=7, #see pklot_env line 99
             hidden_sizes=[128, 128, 128, 128],
             device="cuda" if torch.cuda.is_available() else "cpu",

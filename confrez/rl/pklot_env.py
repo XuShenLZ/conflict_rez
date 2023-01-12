@@ -3,7 +3,7 @@ from itertools import product
 from typing import Dict, Set, Tuple
 import random
 
-from gym.spaces import Box, Discrete
+from gymnasium.spaces import Box, Discrete
 import numpy as np
 import pygame
 from gym.utils import EzPickle, seeding
@@ -611,9 +611,12 @@ class parallel_env(ParallelEnv, EzPickle):
         # Init return values
         observations = {agent: None for agent in self.agents}
         rewards = {agent: 0 for agent in self.agents}
-        dones = {
+        terminations = {
             agent: False for agent in self.agents
         }  # All agents that are in self.agents should be active, thus not done
+        truncations = {
+            agent: False for agent in self.agents
+        }
         infos = {agent: {} for agent in self.agents}
 
         if not self.cycle_done:
@@ -639,7 +642,7 @@ class parallel_env(ParallelEnv, EzPickle):
                     rewards[agent] += -1e3
                 elif self.reach_goal(agent):
                     # If reach the goal, the agent will be done and get huge reward
-                    dones[agent] = True
+                    truncations[agent] = True
                     rewards[agent] += 1e4
 
             for agent in agents_with_collision:
@@ -668,14 +671,13 @@ class parallel_env(ParallelEnv, EzPickle):
 
         # If it reaches, mark all active agents as done
         if self.cycle_done:
-            dones = {agent: True for agent in self.agents}
+            terminations = {agent: True for agent in self.agents}
 
         # For agents that are done, un-register them from the occupancy dict
         for agent in self.agents:
-            if dones[agent]:
+            if truncations[agent]:
                 self.unregister_agent(agent)
 
         # Remove the done agents from the active agent list. This will only affect next iteration
-        self.agents = [agent for agent in self.agents if not dones[agent]]
-
-        return observations, rewards, dones, infos
+        self.agents = [agent for agent in self.agents if not truncations[agent]]
+        return observations, rewards, terminations, truncations, infos
