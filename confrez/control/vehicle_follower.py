@@ -517,35 +517,35 @@ class VehicleFollower(Vehicle):
                 self.opt_lambda_ji[other] = self._adv_onestep(self.opt_lambda_ji[other])
                 self.opt_s[other] = self._adv_onestep(self.opt_s[other])
 
+        self.state.t += self.dt
         # ======== Using Casadi integrator for simulation, might lead to solver failure now
-        # state = ca.vertcat(
-        #     self.state.x.x,
-        #     self.state.x.y,
-        #     self.state.e.psi,
-        #     self.state.v.v,
-        #     self.state.u.u_steer,
-        # )
-        # input = ca.vertcat(self.pred.u_a[0], self.pred.u_steer_dot[0])
-        # zint = self.simulator(state, input)
+        state = ca.vertcat(
+            self.state.x.x,
+            self.state.x.y,
+            self.state.e.psi,
+            self.state.v.v,
+            self.state.u.u_steer,
+        )
+        input = ca.vertcat(self.pred.u_a[0], self.pred.u_steer_dot[0])
+        zint = self.simulator(state, input)
 
-        # self.state.x.x = zint[0].__float__()
-        # self.state.x.y = zint[1].__float__()
-        # self.state.e.psi = zint[2].__float__()
+        self.state.x.x = zint[0].__float__()
+        self.state.x.y = zint[1].__float__()
+        self.state.e.psi = zint[2].__float__()
 
-        # self.state.v.v = zint[3].__float__()
-        # self.state.u.u_steer = zint[4].__float__()
+        self.state.v.v = zint[3].__float__()
+        self.state.u.u_steer = zint[4].__float__()
 
         # ========= Directly using the RK4 model for simulation
-        self.state.t += self.dt
-        self.state.x.x = self.pred.x[1]
-        self.state.x.y = self.pred.y[1]
-        self.state.e.psi = self.pred.psi[1]
+        # self.state.x.x = self.pred.x[1]
+        # self.state.x.y = self.pred.y[1]
+        # self.state.e.psi = self.pred.psi[1]
 
-        self.state.v.v = self.pred.v[1]
-        self.state.u.u_steer = self.pred.u_steer[1]
+        # self.state.v.v = self.pred.v[1]
+        # self.state.u.u_steer = self.pred.u_steer[1]
 
-        self.state.u.u_a = self.pred.u_a[0]
-        self.state.u.u_steer_dot = self.pred.u_steer_dot[0]
+        # self.state.u.u_a = self.pred.u_a[0]
+        # self.state.u.u_steer_dot = self.pred.u_steer_dot[0]
 
         self.final_traj.t.append(self.state.t)
         self.final_traj.x.append(self.state.x.x)
@@ -603,13 +603,14 @@ class MultiDistributedFollower(object):
         self.vis = RealtimeVisualizer(vehicle_body=VehicleBody())
         self.vis.draw_background()
         self.vis.draw_obstacles()
+        self.vis.render()
 
     def setup_multi_vehicles(self):
         """
         set up multiple vehicle solvers
         """
         for v in self.vehicles:
-            self.print(f"======= {v.agent} =======")
+            print(f"======= {v.agent} =======")
             v.plan_single_path(spline_ws=self.spline_ws_config[v.agent])
             v.get_others(self.vehicles)
             v.setup_controller()
@@ -620,7 +621,7 @@ class MultiDistributedFollower(object):
         """
         Solve the path following problem
         """
-        self.print("Solving the path following problem...")
+        print("Solving the path following problem...")
         for _ in tqdm(range(num_iter)):
             start_time = time.time()
             for v in self.vehicles:
@@ -638,7 +639,7 @@ class MultiDistributedFollower(object):
                 self.vis.draw_car(v.state, 255 * np.array(v.color["front"]))
             self.vis.render()
 
-        self.print(f"Mean iteration time = {np.mean(self.iter_time)}")
+        print(f"Mean iteration time = {np.mean(self.iter_time)}")
 
         for v in self.vehicles:
             self.final_results[v.agent] = v.final_traj
@@ -647,7 +648,7 @@ class MultiDistributedFollower(object):
         """
         Plot multi vehicle results
         """
-        self.print("Plotting...")
+        print("Plotting...")
         if interval is None:
             interval = int(
                 (
@@ -726,7 +727,7 @@ class MultiDistributedFollower(object):
         plt.axis("equal")
         plt.savefig(f"dist_follow_{self.rl_file_name}_ref_vs_final.png")
 
-        self.print("Generating animation...")
+        print("Generating animation...")
         fig = plt.figure()
         ax = plt.gca()
 
@@ -777,7 +778,7 @@ class MultiDistributedFollower(object):
 
         animation_filename = f"dist_follow_{self.rl_file_name}_{fps}fps_animation.mp4"
         ani.save(animation_filename, writer=writer)
-        self.print(f"Animation saves as: {animation_filename}")
+        print(f"Animation saves as: {animation_filename}")
 
         plt.show()
 
