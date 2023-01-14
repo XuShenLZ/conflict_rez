@@ -1,5 +1,5 @@
 from launch import LaunchDescription
-from launch.actions import TimerAction
+from launch.actions import TimerAction, ExecuteProcess
 from launch_ros.actions import Node
 
 from ament_index_python.packages import get_package_share_directory
@@ -18,12 +18,11 @@ visualizer_params_file = os.path.join(config_dir, "visualizer_params.yaml")
 with open(global_params_file, "r") as f:
     parsed_global_params = yaml.safe_load(f)
 
-print(parsed_global_params["/**"]["ros__parameters"]["num_vehicles"])
-
 
 def generate_launch_description():
     return LaunchDescription(
         [
+            # ExecuteProcess(cmd=["ros2", "bag", "record", "-a"], output="screen"),
             Node(
                 package="confrez_ros",
                 executable="visualizer_node.py",

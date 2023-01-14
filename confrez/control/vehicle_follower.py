@@ -53,9 +53,6 @@ class VehicleFollower(Vehicle):
 
         self.state: VehicleState = self.init_state
         self.state.t = 0
-        self.state.x.x += self.init_offset.x.x
-        self.state.x.y += self.init_offset.x.y
-        self.state.e.psi += self.init_offset.e.psi
 
         self.pred: VehiclePrediction = None
 
@@ -139,7 +136,7 @@ class VehicleFollower(Vehicle):
         """
         self.others = [v.agent for v in vehicles if v.agent != self.agent]
 
-    def setup_controller(self, dt: float = 0.05, N: int = 30, dmin=0.05):
+    def setup_controller(self, dt: float = 0.1, N: int = 30, dmin=0.05):
         """
         setup the predictive controller
         """
@@ -357,7 +354,7 @@ class VehicleFollower(Vehicle):
             "print_level": 0,
             "tol": 1e-2,
             "constr_viol_tol": 1e-2,
-            # "max_iter": 300,
+            "max_iter": 600,
             # "mumps_mem_percent": 64000,
             "linear_solver": "ma97",
         }
@@ -660,6 +657,7 @@ class MultiDistributedFollower(object):
 
         plt.figure()
         plt.hist(self.iter_time, 100)
+        plt.xlim([0, interval / 1000])
         plt.title("Iteration time of all vehicles")
         plt.xlabel("Time (s)")
         plt.tight_layout()
@@ -803,7 +801,6 @@ def main():
         "vehicle_3": VehicleState(),
     }
     # init_offsets["vehicle_0"].x.x = 0.1
-    # init_offsets["vehicle_0"].x.y = 0.1
     # init_offsets["vehicle_0"].e.psi = np.pi / 20
 
     final_headings = {
@@ -848,7 +845,7 @@ def main():
     )
     multi_follower.setup_multi_vehicles()
     multi_follower.solve()
-    # multi_follower.plot_results()
+    multi_follower.plot_results()
 
 
 if __name__ == "__main__":

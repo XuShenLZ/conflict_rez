@@ -117,7 +117,6 @@ class VehicleNode(MPClabNode):
             for id in range(self.num_vehicles)
             if f"vehicle_{id}" != self.agent
         ]
-        print(f"current vehicle: {self.agent}. Others: {self.others}")
 
         self.other_pred_subs = {}
         self.other_info_subs = {}

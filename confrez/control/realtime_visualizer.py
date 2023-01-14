@@ -17,14 +17,16 @@ class RealtimeVisualizer(object):
         self,
         vehicle_body: VehicleBody,
         width: int = 35,
-        height: int = 30,
-        res: int = 15,
+        height: int = 28,
+        res: int = 30,
     ) -> None:
         self.vehicle_body = vehicle_body
 
         self.res = res
         self.width = width
         self.height = height
+
+        self.top_offset = 3
 
         self.obstacles = compute_obstacles()
 
@@ -41,7 +43,7 @@ class RealtimeVisualizer(object):
         """
         convert right-hand grid indices to its top-left vertex pixel coordinates
         """
-        return x * self.res, (self.height - y) * self.res
+        return x * self.res, (self.height - y + self.top_offset) * self.res
 
     def draw_background(self):
         """
@@ -65,7 +67,8 @@ class RealtimeVisualizer(object):
     ):
         px, py = self.g2i(np.array(traj.x), np.array(traj.y))
 
-        pygame.draw.lines(self.screen, color, False, np.vstack([px, py]).T)
+        pygame.draw.lines(self.screen, color, False, np.vstack([px, py]).T, width=5)
+        # pygame.draw.aalines(self.screen, color, False, np.vstack([px, py]).T)
 
     def draw_car(self, state: VehicleState, color: Tuple[int, int, int] = (0, 0, 0)):
         """

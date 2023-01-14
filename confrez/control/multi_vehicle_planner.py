@@ -47,7 +47,7 @@ class MultiVehiclePlanner(object):
         self.vehicle_config = vehicle_config
         self.region = region
 
-        self.agents = set(self.ws_config.keys())
+        self.agents = sorted(self.ws_config.keys())
         self.agent_pairs = list(combinations(self.agents, 2))
 
         self.rl_tubes = compute_sets(self.rl_file_name)
@@ -606,12 +606,12 @@ def main():
     """
     main
     """
-    rl_file_name = "4v_rl_traj"
+    rl_file_name = "3v_rl_traj"
     ws_config = {
         "vehicle_0": False,
         "vehicle_1": True,
         "vehicle_2": True,
-        "vehicle_3": True,
+        # "vehicle_3": True,
     }
     colors = {
         "vehicle_0": {
@@ -638,6 +638,8 @@ def main():
         "vehicle_2": VehicleState(),
         "vehicle_3": VehicleState(),
     }
+    init_offsets["vehicle_0"].x.x = 0.1
+    init_offsets["vehicle_0"].e.psi = np.pi / 20
 
     final_headings = {
         "vehicle_0": 0,
