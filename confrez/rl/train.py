@@ -1,6 +1,6 @@
 from typing import Callable, List
-from confrez.rl.pklot_env import parallel_env
-from confrez.rl.utils import TensorboardCallback
+from pklot_env import parallel_env
+from utils import TensorboardCallback
 import supersuit as ss
 from stable_baselines3 import DQN
 from stable_baselines3.common.utils import set_random_seed
