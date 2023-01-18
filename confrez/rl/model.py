@@ -81,10 +81,10 @@ class CNN_DQN(Net):
         ) -> Tuple[torch.Tensor, Any]:
             """Mapping: obs -> flatten (inside MLP)-> logits."""
             # print("DEBUG:", obs.type)
-            # obs = obs.reshape((3, 10, 140, 140))
-            obs = torch.from_numpy(obs).float()
+            obs = obs.reshape((3, 10, 140, 140))
+            obs = torch.as_tensor(obs, device=self.device, dtype=torch.float32)
             self.cnn = nn.Sequential(
-                nn.Conv2d(obs.shape[0], 32, kernel_size=8, stride=4, padding=0),
+                nn.Conv2d(obs.shape[1], 32, kernel_size=8, stride=4, padding=0),
                 nn.ReLU(),
                 nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=0),
                 nn.ReLU(),
@@ -95,9 +95,10 @@ class CNN_DQN(Net):
             with torch.no_grad():
                 n_flatten = self.cnn(torch.as_tensor(obs).float()).shape[1]
             self.linear = nn.Sequential(nn.Linear(n_flatten, 7), nn.ReLU())
+            # DEBUG: shape error
             logits = self.linear(self.cnn(obs))
             bsz = logits.shape[0]
-            if self.use_dueling:  # Dueling DQN
+            if self.use_dueling: 
                 q, v = self.Q(logits), self.V(logits)
                 if self.num_atoms > 1:
                     q = q.view(bsz, -1, self.num_atoms)
