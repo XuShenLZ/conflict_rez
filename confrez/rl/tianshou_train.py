@@ -43,7 +43,6 @@ def get_agents(
         net = CNN_DQN(
             state_shape=58800,
             action_shape=7, #see pklot_env line 99
-            hidden_sizes=[128, 128, 128, 128],
             device="cuda" if torch.cuda.is_available() else "cpu",
         ).to("cuda" if torch.cuda.is_available() else "cpu")
         if optim is None:
@@ -80,11 +79,11 @@ if __name__ == "__main__":
     train_collector = Collector(
         policy,
         train_env,
-        VectorReplayBuffer(20_000, len(train_env)),
+        VectorReplayBuffer(100000, len(train_env)),
         exploration_noise=True,
     )
     test_collector = Collector(policy, test_env, exploration_noise=True)
-    # policy.set_eps(1)
+    policy.set_eps(0.2)
     train_collector.collect(n_step=64 * 10)  # batch size * training_num
 
     # ======== Step 4: Callback functions setup =========
@@ -94,10 +93,11 @@ if __name__ == "__main__":
         torch.save(policy.policies[agents[1]].state_dict(), model_save_path)
 
     def stop_fn(mean_rewards):
-        return mean_rewards >= 0.6
+        # currently set to never stop
+        return False 
 
     def train_fn(epoch, env_step):
-        policy.policies[agents[1]].set_eps(0.1)
+        policy.policies[agents[1]].set_eps(0.2)
 
     def test_fn(epoch, env_step):
         policy.policies[agents[1]].set_eps(0.05)
@@ -110,7 +110,7 @@ if __name__ == "__main__":
         policy=policy,
         train_collector=train_collector,
         test_collector=test_collector,
-        max_epoch=50,
+        max_epoch=1000,
         step_per_epoch=1000,
         step_per_collect=50,
         episode_per_test=10,

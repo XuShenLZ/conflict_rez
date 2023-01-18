@@ -12,6 +12,7 @@ from typing import (
 )
 import numpy as np
 import torch
+import torchvision
 from torch import nn
 import gymnasium as gym
 from tianshou.utils.net.common import Net, MLP
@@ -21,28 +22,21 @@ class CNN_DQN(Net):
     def __init__(self, 
                 state_shape: Union[int, Sequence[int]], 
                 action_shape: Union[int, Sequence[int]] = 0, 
-                hidden_sizes: Sequence[int] = ..., 
-                norm_layer: Optional[ModuleType] = None, 
                 activation: Optional[ModuleType] = nn.ReLU, 
                 device: Union[str, int, torch.device] = "cpu", 
-                softmax: bool = False, 
                 concat: bool = False, 
                 num_atoms: int = 1, 
                 dueling_param: Optional[Tuple[Dict[str, Any], Dict[str, Any]]] = None, 
                 linear_layer: Type[nn.Linear] = nn.Linear) -> None:
         super().__init__(state_shape, 
                         action_shape, 
-                        hidden_sizes, 
-                        norm_layer, 
                         activation, 
                         device, 
-                        softmax, 
                         concat, 
                         num_atoms, 
                         dueling_param, 
                         linear_layer)
         self.device = device
-        self.softmax = softmax
         self.num_atoms = num_atoms
         input_dim = int(np.prod(state_shape))
         action_dim = int(np.prod(action_shape)) * num_atoms
@@ -80,9 +74,16 @@ class CNN_DQN(Net):
             info: Dict[str, Any] = {},
         ) -> Tuple[torch.Tensor, Any]:
             """Mapping: obs -> flatten (inside MLP)-> logits."""
-            # print("DEBUG:", obs.type)
-            obs = obs.reshape((3, 10, 140, 140))
-            obs = torch.as_tensor(obs, device=self.device, dtype=torch.float32)
+            # print("DEBUG:", obs.shape)
+            # obs_copy = obs.reshape((-1, 3, 140, 140))
+            transform = torchvision.transforms.Compose([
+                torchvision.transforms.ToTensor()
+            ])
+            obs_tensor = []
+            for o in obs:
+                obs_tensor.append(transform(o))
+            obs = torch.stack(tensors=obs_tensor, dim=0)
+            # print("DEBUG:", obs.shape)
             self.cnn = nn.Sequential(
                 nn.Conv2d(obs.shape[1], 32, kernel_size=8, stride=4, padding=0),
                 nn.ReLU(),
