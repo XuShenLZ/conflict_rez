@@ -1,12 +1,12 @@
 import os
 from typing import Callable, List, Optional, Tuple
 import pklot_env
-from pklot_env import parallel_env
 import supersuit as ss
 from datetime import datetime
 from os import path as os_path
 import torch
 import numpy as np
+from scipy import interpolate
 from model import CNN_DQN
 
 from tianshou.data import Collector, VectorReplayBuffer
@@ -27,6 +27,31 @@ timestamp = now.strftime("%m-%d-%Y_%H-%M-%S")
 MODEL_NAME = "Tianshou-Multiagent"
 NUM_AGENT = 4
 
+def step_schedule(
+    initial_value: float, steps: List[float], levels: List[float]
+) -> Callable[[float], float]:
+    """
+    Step learning rate schedule.
+
+    :param initial_value: Initial learning rate.
+    :return: schedule that computes
+      current learning rate depending on remaining progress
+    """
+    weight_func = interpolate.interp1d(steps, levels, "next", fill_value="extrapolate")
+
+    def func(progress_remaining: float) -> float:
+        """
+        Progress will decrease from 1 (beginning) to 0.
+
+        :param progress_remaining:
+        :return: current learning rate
+        """
+        weight = weight_func(progress_remaining).__float__()
+        return weight * initial_value
+
+    return func
+
+
 def get_env():
     """This function is needed to provide callables for DummyVectorEnv."""
     env = pklot_env.raw_env(n_vehicles=4, seed=1, random_reset=False)
@@ -42,6 +67,7 @@ def get_agents(
     for _ in range(NUM_AGENT):
         net = CNN_DQN(
             state_shape=58800,
+            hidden_sizes=[128, 128, 128, 128],
             action_shape=7, #see pklot_env line 99
             device="cuda" if torch.cuda.is_available() else "cpu",
         ).to("cuda" if torch.cuda.is_available() else "cpu")
@@ -54,6 +80,7 @@ def get_agents(
             discount_factor=0.9,
             estimation_step=100,
             target_update_freq=320,
+            lr_scheduler = step_schedule(0.0005, [1, 0.8, 0.6, 0.3], [1, 0.5, 0.1, 0.05])
         ))
 
     policy = MultiAgentPolicyManager(agents, env)
@@ -83,7 +110,7 @@ if __name__ == "__main__":
         exploration_noise=True,
     )
     test_collector = Collector(policy, test_env, exploration_noise=True)
-    policy.set_eps(0.2)
+    # policy.set_eps(0.2)
     train_collector.collect(n_step=64 * 10)  # batch size * training_num
 
     # ======== Step 4: Callback functions setup =========

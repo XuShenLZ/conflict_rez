@@ -22,32 +22,35 @@ class CNN_DQN(Net):
     def __init__(self, 
                 state_shape: Union[int, Sequence[int]], 
                 action_shape: Union[int, Sequence[int]] = 0, 
+                hidden_sizes: Sequence[int] = ..., 
+                norm_layer: Optional[ModuleType] = None, 
                 activation: Optional[ModuleType] = nn.ReLU, 
                 device: Union[str, int, torch.device] = "cpu", 
                 concat: bool = False, 
+                softmax: bool = False, 
                 num_atoms: int = 1, 
                 dueling_param: Optional[Tuple[Dict[str, Any], Dict[str, Any]]] = None, 
                 linear_layer: Type[nn.Linear] = nn.Linear) -> None:
         super().__init__(state_shape, 
                         action_shape, 
+                        hidden_sizes, 
+                        norm_layer, 
                         activation, 
                         device, 
                         concat, 
+                        softmax,
                         num_atoms, 
                         dueling_param, 
                         linear_layer)
         self.device = device
         self.num_atoms = num_atoms
+        self.softmax = softmax
         input_dim = int(np.prod(state_shape))
         action_dim = int(np.prod(action_shape)) * num_atoms
         if concat:
             input_dim += action_dim
         self.use_dueling = dueling_param is not None
         output_dim = action_dim if not self.use_dueling and not concat else 0
-        # self.model = nn.Sequential(
-        #     input_dim, output_dim, hidden_sizes, norm_layer, activation, device,
-        #     linear_layer
-        # )
         self.output_dim = self.model.output_dim
         if self.use_dueling:  # dueling DQN
             q_kwargs, v_kwargs = dueling_param  # type: ignore
