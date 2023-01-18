@@ -7,6 +7,7 @@ from datetime import datetime
 from os import path as os_path
 import torch
 import numpy as np
+from model import CNN_DQN
 
 from tianshou.data import Collector, VectorReplayBuffer
 from tianshou.env import DummyVectorEnv, PettingZooEnv
@@ -39,7 +40,7 @@ def get_agents(
     env = get_env()
     agents = []
     for _ in range(NUM_AGENT):
-        net = Net(
+        net = CNN_DQN(
             state_shape=58800,
             action_shape=7, #see pklot_env line 99
             hidden_sizes=[128, 128, 128, 128],
