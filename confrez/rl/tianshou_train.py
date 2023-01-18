@@ -18,7 +18,9 @@ from tianshou.policy import (
     MultiAgentPolicyManager
 )
 from tianshou.trainer import offpolicy_trainer
-from tianshou.utils.net.common import Net
+
+from tianshou.utils import WandbLogger
+from torch.utils.tensorboard import SummaryWriter
 
 cwd = os_path.dirname(__file__)
 now = datetime.now()
@@ -132,6 +134,10 @@ if __name__ == "__main__":
     def reward_metric(rews):
         return rews[:, 1]
 
+    # logger:
+    logger = WandbLogger()
+    logger.load(SummaryWriter("./log/"))
+
     # ======== Step 5: Run the trainer =========
     result = offpolicy_trainer(
         policy=policy,
@@ -149,6 +155,7 @@ if __name__ == "__main__":
         update_per_step=0.1,
         test_in_train=False,
         reward_metric=reward_metric,
+        logger = logger
     )
 
     # return result, policy.policies[agents[1]]
