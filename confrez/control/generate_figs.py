@@ -1,5 +1,5 @@
 from itertools import product
-from typing import Dict
+from typing import Dict, List
 from matplotlib.animation import FFMpegWriter, FuncAnimation
 import matplotlib.pyplot as plt
 import numpy as np
@@ -431,6 +431,328 @@ def plot_single_vehicle_final_w_poses(
     plt.tight_layout()
 
 
+def plot_multi_follower_ref_w_poses(
+    rl_file_name: str = "4v_rl_traj",
+    sol_file_name: str = "4v_rl_traj_follower_ref",
+):
+    """
+    plot the traj of multi vehicle reference with a few poses
+    """
+    zu: Dict[str, VehiclePrediction] = dill.load(open(f"{sol_file_name}.pkl", "rb"))
+
+    rl_sets = compute_sets(rl_file_name)
+
+    max_step = max([len(rl_set) for rl_set in rl_sets.values()])
+
+    for i in range(max_step):
+
+        fig = plt.figure()
+        ax = plt.gca()
+
+        for obstacle in obstacles:
+            obstacle.plot(ax, facecolor=(0 / 255, 128 / 255, 255 / 255))
+
+        for obstacle in static_vehicles:
+            obstacle.plot(ax, fill=False, edgecolor="k", hatch="//")
+
+        for line in parking_lines:
+            plt.plot(line[:, 0], line[:, 1], "k--", linewidth=1)
+
+        for agent in rl_sets:
+            plot_i = min(i, len(rl_sets[agent]) - 1)
+            body_sets = rl_sets[agent][plot_i]
+            body_sets["front"].plot(
+                ax,
+                alpha=0.3,
+                facecolor=np.array(COLORS[agent]["front"]) / 255,
+            )
+            body_sets["back"].plot(
+                ax,
+                alpha=0.3,
+                facecolor=np.array(COLORS[agent]["back"]) / 255,
+            )
+
+            key_stride = 30
+            k = min(key_stride * plot_i, len(zu[agent].x) - 1)
+
+            plt.plot(
+                zu[agent].x[:k],
+                zu[agent].y[:k],
+                color=np.array(COLORS[agent]["front"]) / 255,
+                linewidth=2,
+                linestyle="-.",
+            )
+
+            plot_car(
+                zu[agent].x[k],
+                zu[agent].y[k],
+                zu[agent].psi[k],
+                VehicleBody(),
+                car_color=np.array(COLORS[agent]["back"]) / 255,
+            )
+        # ax.set_xlim(xmin=0, xmax=13 * 2.5)
+        # ax.set_ylim(ymin=3 * 2.5, ymax=11 * 2.5)
+        ax.axis("off")
+        ax.set_aspect("equal")
+
+        plt.tight_layout()
+
+        fig.savefig(f"4v_ref_step_{i}.pdf", bbox_inches="tight")
+
+
+def plot_multi_follower_final_vs_ref(
+    ref_file_name: str = "4v_rl_traj_follower_ref",
+    sol_file_name: str = "4v_rl_traj_follower_final",
+):
+    zu_ref: Dict[str, VehiclePrediction] = dill.load(open(f"{ref_file_name}.pkl", "rb"))
+
+    zu: Dict[str, VehiclePrediction] = dill.load(open(f"{sol_file_name}.pkl", "rb"))
+
+    fig = plt.figure()
+    ax = plt.gca()
+    for obstacle in obstacles:
+        obstacle.plot(ax, facecolor=(0 / 255, 128 / 255, 255 / 255))
+
+    for obstacle in static_vehicles:
+        obstacle.plot(ax, fill=False, edgecolor="k", hatch="//")
+
+    for line in parking_lines:
+        plt.plot(line[:, 0], line[:, 1], "k--", linewidth=1)
+
+    ref_label = "references"
+    for agent in zu_ref:
+        plt.plot(
+            zu_ref[agent].x,
+            zu_ref[agent].y,
+            "k-.",
+            linewidth=1.5,
+            label=ref_label,
+        )
+        ref_label = None
+        plt.plot(
+            zu[agent].x,
+            zu[agent].y,
+            color=np.array(COLORS[agent]["front"]) / 255,
+            linewidth=2,
+            label=agent,
+        )
+        # for pair in v.ref_pair:
+        #     plt.plot(pair[:, 0], pair[:, 1], color="g", linewidth=1)
+
+    ax.axis("off")
+    ax.set_aspect("equal")
+    ax.legend(
+        loc="upper right",
+        bbox_to_anchor=(0.96, 0.97),
+        fontsize="large",
+    )
+    plt.tight_layout()
+    fig.savefig(f"4v_follower_ref_vs_final.pdf", bbox_inches="tight")
+
+
+def plot_multi_follower_time_box(time_file_name: str = "4v_rl_traj_follower_iter_time"):
+    import pandas as pd
+    import seaborn as sns
+
+    iter_time: Dict[str, List] = dill.load(open(f"{time_file_name}.pkl", "rb"))
+
+    iter_time_idx_name = {agent[-1]: iter_time[agent] for agent in iter_time}
+
+    my_pal = {
+        agent: np.array(COLORS[f"vehicle_{agent}"]["front"]) / 255
+        for agent in iter_time_idx_name
+    }
+
+    df = pd.DataFrame.from_dict(iter_time_idx_name)
+
+    # fig = plt.figure(figsize=(16, 6))
+    # sns.boxplot(data=df, orient="h", palette=my_pal)
+
+    # ax = plt.gca()
+    # ax.set_xlabel(
+    #     "Time (s)", fontname="Times New Roman", fontsize=30, fontweight="bold"
+    # )
+    # plt.xticks(fontsize=25)
+    # plt.yticks(fontname="Times New Roman", fontsize=30, fontweight="bold")
+
+    fig = plt.figure(figsize=(6, 8))
+    sns.boxplot(data=df, palette=my_pal)
+
+    plt.ylim([0.02, 0.1])
+
+    ax = plt.gca()
+    ax.set_ylabel(
+        "Time (s)", fontname="Times New Roman", fontsize=30, fontweight="bold"
+    )
+    ax.set_xlabel("Vehicle", fontname="Times New Roman", fontsize=30, fontweight="bold")
+    plt.yticks(fontsize=25)
+    plt.xticks(fontsize=30)
+
+    fig.savefig(f"4v_follower_time_stats.pdf", bbox_inches="tight")
+
+
+def plot_multi_follower_final_pose_k(
+    k,
+    rl_file_name: str = "4v_rl_traj",
+    sol_file_name: str = "4v_rl_traj_follower_final",
+):
+    """
+    plot the traj of multi vehicles final with pose
+    """
+    zu: Dict[str, VehiclePrediction] = dill.load(open(f"{sol_file_name}.pkl", "rb"))
+    dt = zu["vehicle_0"].t[1] - zu["vehicle_0"].t[0]
+    print(f"Current time t = {k * dt}")
+
+    rl_sets = compute_sets(rl_file_name)
+
+    fig = plt.figure()
+    ax = plt.gca()
+
+    for obstacle in obstacles:
+        obstacle.plot(ax, facecolor=(0 / 255, 128 / 255, 255 / 255))
+
+    for obstacle in static_vehicles:
+        obstacle.plot(ax, fill=False, edgecolor="k", hatch="//")
+
+    for line in parking_lines:
+        plt.plot(line[:, 0], line[:, 1], "k--", linewidth=1)
+
+    for i, agent in enumerate(rl_sets):
+        x = zu[agent].x
+        y = zu[agent].y
+        plt.plot(
+            x[:k],
+            y[:k],
+            color=np.array(COLORS[agent]["front"]) / 255,
+            linewidth=2.5,
+            label=agent,
+            zorder=i,
+        )
+
+        plot_car(
+            zu[agent].x[k],
+            zu[agent].y[k],
+            zu[agent].psi[k],
+            VehicleBody(),
+            text=i,
+            zorder=10 + i,
+            fill_color=np.array(COLORS[agent]["front"]) / 255,
+        )
+    # ax.set_xlim(xmin=0, xmax=13 * 2.5)
+    # ax.set_ylim(ymin=3 * 2.5, ymax=11 * 2.5)
+    ax.axis("off")
+    ax.set_aspect("equal")
+    # ax.legend(
+    #     loc="upper right",
+    #     bbox_to_anchor=(0.96, 0.97),
+    #     fontsize="large",
+    # )
+
+    plt.tight_layout()
+    fig.savefig(f"4v_follower_final_poses_{k}.pdf", bbox_inches="tight")
+
+
+def plot_multi_follower_states(sol_file_name: str = "4v_rl_traj_follower_final"):
+    """
+    plot the state & input profile of multi follower final
+    """
+    zu: Dict[str, VehiclePrediction] = dill.load(open(f"{sol_file_name}.pkl", "rb"))
+    print(zu["vehicle_0"].t[-1] / 9)
+
+    fig = plt.figure(figsize=(14, 8))
+
+    for agent in sorted(zu):
+        ax = plt.subplot(2, 2, 1)
+        t = zu[agent].t
+        v = zu[agent].v
+        ax.plot(
+            t,
+            v,
+            color=np.array(COLORS[agent]["front"]) / 255,
+            linewidth=2,
+            label=agent,
+        )
+        ax.set_ylabel(
+            "Speed (m/s)", fontname="Times New Roman", fontsize=20, fontweight="bold"
+        )
+        ax.tick_params(axis="y", labelsize="x-large")
+        ax.get_xaxis().set_visible(False)
+        ax.legend(fontsize="x-large")
+
+        ax = plt.subplot(2, 2, 2)
+        t = zu[agent].t
+        u_steer = zu[agent].u_steer
+        ax.plot(
+            t,
+            u_steer,
+            color=np.array(COLORS[agent]["front"]) / 255,
+            linewidth=2,
+            label=agent,
+        )
+        ax.set_ylabel(
+            "Steering Angle (rad)",
+            fontname="Times New Roman",
+            fontsize=20,
+            fontweight="bold",
+        )
+        ax.tick_params(axis="y", labelsize="x-large")
+        ax.get_xaxis().set_visible(False)
+        ax.legend(fontsize="x-large")
+
+        ax = plt.subplot(2, 2, 3)
+        t = zu[agent].t
+        a = zu[agent].u_a
+        ax.plot(
+            t,
+            a,
+            color=np.array(COLORS[agent]["front"]) / 255,
+            linewidth=2,
+            label=agent,
+        )
+        ax.set_ylabel(
+            "Acceleration ($m/s^2$)",
+            fontname="Times New Roman",
+            fontsize=20,
+            fontweight="bold",
+            math_fontfamily="cm",
+        )
+        ax.set_xlabel(
+            "Time (s)", fontname="Times New Roman", fontsize=20, fontweight="bold"
+        )
+        ax.tick_params(axis="x", labelsize="x-large")
+        ax.tick_params(axis="y", labelsize="x-large")
+        ax.legend(fontsize="x-large")
+
+        ax = plt.subplot(2, 2, 4)
+        t = zu[agent].t
+        u_steer_dot = zu[agent].u_steer_dot
+        ax.plot(
+            t,
+            u_steer_dot,
+            color=np.array(COLORS[agent]["front"]) / 255,
+            linewidth=2,
+            label=agent,
+        )
+        ax.set_ylabel(
+            "Steering Rate (rad/s)",
+            fontname="Times New Roman",
+            fontsize=20,
+            fontweight="bold",
+        )
+        ax.set_xlabel(
+            "Time (s)", fontname="Times New Roman", fontsize=20, fontweight="bold"
+        )
+        ax.tick_params(axis="x", labelsize="x-large")
+        ax.tick_params(axis="y", labelsize="x-large")
+        ax.legend(fontsize="x-large")
+    # ax.set_xlim(xmin=0, xmax=13 * 2.5)
+    # ax.set_ylim(ymin=3 * 2.5, ymax=11 * 2.5)
+
+    # plt.tight_layout()
+    fig.subplots_adjust(wspace=0.22, hspace=0)
+    fig.savefig("state_input_profile_follower.pdf", bbox_inches="tight")
+
+
 def plot_multi_vehicle_final(
     rl_file_name: str = "4v_rl_traj",
     sol_file_name: str = "4v_rl_traj_opt",
@@ -756,12 +1078,52 @@ def main():
 
     # plot_multi_vehicle_states(sol_file_name=mv_sol_file_name)
 
+    ref_sol_file_name = "4v_rl_traj_follower_ref"
+    # plot_multi_follower_ref_w_poses(
+    #     rl_file_name=rl_file_name, sol_file_name=ref_sol_file_name
+    # )
+    follower_sol_file_name = "4v_rl_traj_follower_final"
+    # plot_multi_follower_final_vs_ref(
+    #     ref_file_name=ref_sol_file_name, sol_file_name=follower_sol_file_name
+    # )
+
+    follower_time_file_name = "4v_rl_traj_follower_iter_time"
+    plot_multi_follower_time_box(time_file_name=follower_time_file_name)
+
+    # plot_multi_follower_final_pose_k(
+    #     0, rl_file_name=rl_file_name, sol_file_name=follower_sol_file_name
+    # )
+    # plot_multi_follower_final_pose_k(
+    #     40, rl_file_name=rl_file_name, sol_file_name=follower_sol_file_name
+    # )
+    # plot_multi_follower_final_pose_k(
+    #     50, rl_file_name=rl_file_name, sol_file_name=follower_sol_file_name
+    # )
+    # plot_multi_follower_final_pose_k(
+    #     55, rl_file_name=rl_file_name, sol_file_name=follower_sol_file_name
+    # )
+    # plot_multi_follower_final_pose_k(
+    #     60, rl_file_name=rl_file_name, sol_file_name=follower_sol_file_name
+    # )
+
+    # plot_multi_follower_final_pose_k(
+    #     90, rl_file_name=rl_file_name, sol_file_name=follower_sol_file_name
+    # )
+    # plot_multi_follower_final_pose_k(
+    #     180, rl_file_name=rl_file_name, sol_file_name=follower_sol_file_name
+    # )
+    # plot_multi_follower_final_pose_k(
+    #     240, rl_file_name=rl_file_name, sol_file_name=follower_sol_file_name
+    # )
+
+    # plot_multi_follower_states(sol_file_name=follower_sol_file_name)
+
     # generate_animation(sol_file_name=mv_sol_file_name, interval=40)
 
     csv_file_name = (
         "run-DQN-CNN-4v-fixed_11-01-2022_11-03-10_1-tag-eval_mean_epi_rewards.csv"
     )
-    plot_training_rewards(csv_file_name=csv_file_name)
+    # plot_training_rewards(csv_file_name=csv_file_name)
 
     plt.show()
 

@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, FFMpegWriter
 import time
+import dill
 
 from tqdm import tqdm
 
@@ -26,6 +27,10 @@ from confrez.control.utils import plot_car
 from confrez.pytypes import VehiclePrediction, VehicleState
 
 np.random.seed(0)
+
+static_vehicles = compute_static_vehicles()
+obstacles = compute_obstacles()
+parking_lines = compute_parking_lines()
 
 
 class VehicleFollower(Vehicle):
@@ -541,8 +546,8 @@ class VehicleFollower(Vehicle):
         # self.state.v.v = self.pred.v[1]
         # self.state.u.u_steer = self.pred.u_steer[1]
 
-        # self.state.u.u_a = self.pred.u_a[0]
-        # self.state.u.u_steer_dot = self.pred.u_steer_dot[0]
+        self.state.u.u_a = self.pred.u_a[0]
+        self.state.u.u_steer_dot = self.pred.u_steer_dot[0]
 
         self.final_traj.t.append(self.state.t)
         self.final_traj.x.append(self.state.x.x)
@@ -592,7 +597,7 @@ class MultiDistributedFollower(object):
         self.rl_tubes = compute_sets(self.rl_file_name)
         self.obstacles = compute_obstacles()
 
-        self.iter_time = []
+        self.iter_time = {agent: [] for agent in self.agents}
 
         self.single_results: Dict[str, VehiclePrediction] = {}
         self.final_results: Dict[str, VehiclePrediction] = {}
@@ -614,20 +619,24 @@ class MultiDistributedFollower(object):
             v.get_current_ref()
             self.single_results[v.agent] = v.reference_traj
 
+        # dill.dump(
+        #     self.single_results, open(f"{self.rl_file_name}_follower_ref.pkl", "wb")
+        # )
+
     def solve(self, num_iter: int = 500):
         """
         Solve the path following problem
         """
         print("Solving the path following problem...")
         for _ in tqdm(range(num_iter)):
-            start_time = time.time()
             for v in self.vehicles:
                 v.get_others_pred(self.vehicles)
 
             for v in self.vehicles:
+                start_time = time.time()
                 v.step()
 
-            self.iter_time.append((time.time() - start_time) / len(self.vehicles))
+                self.iter_time[v.agent].append(time.time() - start_time)
 
             self.vis.draw_background()
             self.vis.draw_obstacles()
@@ -636,10 +645,22 @@ class MultiDistributedFollower(object):
                 self.vis.draw_car(v.state, 255 * np.array(v.color["front"]))
             self.vis.render()
 
-        print(f"Mean iteration time = {np.mean(self.iter_time)}")
+        print(
+            f"Mean iteration time = {[np.mean(self.iter_time[agent]) for agent in self.agents]}"
+        )
+        print(
+            f"Max iteration time = {[np.amax(self.iter_time[agent]) for agent in self.agents]}"
+        )
 
         for v in self.vehicles:
             self.final_results[v.agent] = v.final_traj
+
+        dill.dump(
+            self.final_results, open(f"{self.rl_file_name}_follower_final.pkl", "wb")
+        )
+        dill.dump(
+            self.iter_time, open(f"{self.rl_file_name}_follower_iter_time.pkl", "wb")
+        )
 
     def plot_results(self, interval: int = None):
         """
@@ -655,12 +676,29 @@ class MultiDistributedFollower(object):
                 * 1000
             )
 
-        plt.figure()
-        plt.hist(self.iter_time, 100)
-        plt.xlim([0, interval / 1000])
-        plt.title("Iteration time of all vehicles")
-        plt.xlabel("Time (s)")
-        plt.tight_layout()
+        import pandas as pd
+        import seaborn as sns
+
+        iter_time_idx_name = {agent[-1]: self.iter_time[agent] for agent in self.agents}
+
+        my_pal = {agent[-1]: self.colors[agent]["front"] for agent in self.agents}
+
+        df = pd.DataFrame.from_dict(iter_time_idx_name)
+
+        fig = plt.figure(figsize=(6, 8))
+        sns.boxplot(data=df, palette=my_pal)
+
+        plt.ylim([0.02, 0.1])
+
+        ax = plt.gca()
+        ax.set_ylabel(
+            "Time (s)", fontname="Times New Roman", fontsize=30, fontweight="bold"
+        )
+        ax.set_xlabel(
+            "Vehicle", fontname="Times New Roman", fontsize=30, fontweight="bold"
+        )
+        plt.yticks(fontsize=25)
+        plt.xticks(fontsize=30)
 
         plt.figure()
         static_vehicles = compute_static_vehicles()
@@ -716,11 +754,45 @@ class MultiDistributedFollower(object):
         plt.savefig(f"dist_follow_{self.rl_file_name}_XY_final_traj.png")
 
         plt.figure()
+        ax = plt.gca()
+        for obstacle in obstacles:
+            obstacle.plot(ax, facecolor=(0 / 255, 128 / 255, 255 / 255))
+
+        for obstacle in static_vehicles:
+            obstacle.plot(ax, fill=False, edgecolor="k", hatch="//")
+
+        for line in parking_lines:
+            plt.plot(line[:, 0], line[:, 1], "k--", linewidth=1)
+
+        ref_label = "references"
         for v in self.vehicles:
-            plt.plot(v.reference_traj.x, v.reference_traj.y, color="b")
-            plt.plot(v.final_traj.x, v.final_traj.y, "--r")
-            for pair in v.ref_pair:
-                plt.plot(pair[:, 0], pair[:, 1], color="g", linewidth=0.25)
+            plt.plot(
+                v.reference_traj.x,
+                v.reference_traj.y,
+                "k-.",
+                linewidth=1.5,
+                label=ref_label,
+            )
+            ref_label = None
+            plt.plot(
+                v.final_traj.x,
+                v.final_traj.y,
+                color=self.colors[v.agent]["front"],
+                linewidth=2,
+                label=agent,
+            )
+
+            # for pair in v.ref_pair:
+            #     plt.plot(pair[:, 0], pair[:, 1], color="g", linewidth=1)
+
+        ax.axis("off")
+        ax.set_aspect("equal")
+        ax.legend(
+            loc="upper right",
+            bbox_to_anchor=(0.96, 0.97),
+            fontsize="large",
+        )
+        plt.tight_layout()
 
         plt.axis("equal")
         plt.savefig(f"dist_follow_{self.rl_file_name}_ref_vs_final.png")
@@ -844,7 +916,7 @@ def main():
         final_headings=final_headings,
     )
     multi_follower.setup_multi_vehicles()
-    multi_follower.solve()
+    multi_follower.solve(num_iter=250)
     multi_follower.plot_results()
 
 
