@@ -496,9 +496,9 @@ class VehicleFollower(Vehicle):
                 self.opt_lambda_ji[other] = sol.value(self.lambda_ji[other])
                 self.opt_s[other] = sol.value(self.s[other])
         except:
-            self.print(
-                f"=== Solving failed, {self.back_up_steps} remaining backup steps. ====="
-            )
+            # self.print(
+            #     f"=== Solving failed, {self.back_up_steps} remaining backup steps. ====="
+            # )
             self.back_up_steps -= 1
 
             self.pred.x = self._adv_onestep(self.pred.x)
@@ -688,7 +688,7 @@ class MultiDistributedFollower(object):
         fig = plt.figure(figsize=(6, 8))
         sns.boxplot(data=df, palette=my_pal)
 
-        plt.ylim([0.02, 0.1])
+        # plt.ylim([0.02, 0.1])
 
         ax = plt.gca()
         ax.set_ylabel(
