@@ -176,7 +176,7 @@ if __name__ == "__main__":
         # TODO
         test_in_train=False,
         reward_metric=reward_metric,
-        # logger = logger
+        logger = logger
     )
 
     # return result, policy.policies[agents[1]]
