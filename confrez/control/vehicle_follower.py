@@ -81,6 +81,8 @@ class VehicleFollower(Vehicle):
         self.final_traj.u_a = [self.state.u.u_a]
         self.final_traj.u_steer_dot = [self.state.u.u_steer_dot]
 
+        self.iter_time = []
+
         if printer is None:
             self.print = print
         else:
@@ -353,7 +355,7 @@ class VehicleFollower(Vehicle):
 
         p_opts = {
             "expand": True,
-            "print_time": False,
+            # "print_time": False,
         }
         s_opts = {
             "print_level": 0,
@@ -476,6 +478,7 @@ class VehicleFollower(Vehicle):
         try:
             sol = self.opti.solve()
             # print(sol.stats()["return_status"])
+            self.iter_time.append(sol.stats()["t_wall_total"])
             self.back_up_steps = self.N - 1
 
             self.pred.x = sol.value(self.x)
@@ -499,6 +502,7 @@ class VehicleFollower(Vehicle):
             # self.print(
             #     f"=== Solving failed, {self.back_up_steps} remaining backup steps. ====="
             # )
+            self.iter_time.append(0.5)
             self.back_up_steps -= 1
 
             self.pred.x = self._adv_onestep(self.pred.x)
@@ -633,10 +637,10 @@ class MultiDistributedFollower(object):
                 v.get_others_pred(self.vehicles)
 
             for v in self.vehicles:
-                start_time = time.time()
+                # start_time = time.time()
                 v.step()
 
-                self.iter_time[v.agent].append(time.time() - start_time)
+                # self.iter_time[v.agent].append(time.time() - start_time)
 
             self.vis.draw_background()
             self.vis.draw_obstacles()
@@ -644,6 +648,9 @@ class MultiDistributedFollower(object):
                 self.vis.draw_traj(v.final_traj, 255 * np.array(v.color["front"]))
                 self.vis.draw_car(v.state, 255 * np.array(v.color["front"]))
             self.vis.render()
+
+        for v in self.vehicles:
+            self.iter_time[v.agent] = v.iter_time
 
         print(
             f"Mean iteration time = {[np.mean(self.iter_time[agent]) for agent in self.agents]}"
@@ -688,7 +695,9 @@ class MultiDistributedFollower(object):
         fig = plt.figure(figsize=(6, 8))
         sns.boxplot(data=df, palette=my_pal)
 
-        # plt.ylim([0.02, 0.1])
+        plt.ylim([0.01, 0.09])
+        print("The number of iterations that goes above 0.1s")
+        print((df > 0.1).sum())
 
         ax = plt.gca()
         ax.set_ylabel(

@@ -578,7 +578,9 @@ def plot_multi_follower_time_box(time_file_name: str = "4v_rl_traj_follower_iter
     fig = plt.figure(figsize=(6, 8))
     sns.boxplot(data=df, palette=my_pal)
 
-    plt.ylim([0.02, 0.1])
+    plt.ylim([0.01, 0.09])
+    print("The number of iterations that goes above 0.1s")
+    print((df > 0.1).sum())
 
     ax = plt.gca()
     ax.set_ylabel(
