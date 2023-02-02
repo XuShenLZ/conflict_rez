@@ -18,7 +18,8 @@ import gymnasium as gym
 from tianshou.utils.net.common import Net, MLP
 ModuleType = Type[nn.Module]
 
-class CNN_DQN(Net):
+class CNN_DQN(Net): #TODO: nn.Module
+    ## eps scheduler
     def __init__(self, 
                 state_shape: Union[int, Sequence[int]], 
                 action_shape: Union[int, Sequence[int]] = 0, 
@@ -87,7 +88,9 @@ class CNN_DQN(Net):
                 obs_tensor.append(transform(o))
             obs = torch.stack(tensors=obs_tensor, dim=0)
             # print("DEBUG:", obs.shape)
+            # TODO: move to _init_
             self.cnn = nn.Sequential(
+                #?? (10 3 140 140)
                 nn.Conv2d(obs.shape[1], 32, kernel_size=8, stride=4, padding=0),
                 nn.ReLU(),
                 nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=0),
@@ -113,3 +116,45 @@ class CNN_DQN(Net):
             if self.softmax:
                 logits = torch.softmax(logits, dim=-1)
             return logits, state
+
+class CNNDQN(nn.Module):
+    def __init__(self, state_shape, action_shape, obs) -> None:
+        super().__init__()
+        transform = torchvision.transforms.Compose([
+                        torchvision.transforms.ToTensor()
+                    ])
+        
+        self.cnn = nn.Sequential(
+                #?? (10 3 140 140)
+                nn.Conv2d(state_shape[1], 32, kernel_size=8, stride=4, padding=0),
+                nn.ReLU(),
+                nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=0),
+                nn.ReLU(),
+                nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=0),
+                nn.ReLU(),
+                nn.Flatten(),
+            )
+        with torch.no_grad():
+            for o in obs:
+                obs_transformed = transform(o)
+            obs_transformed = obs_transformed.reshape(1, 3, 140, 140)
+            # print("DEBUG: obs shape", obs_transformed.shape)
+            after_cnn = self.cnn(obs_transformed.float())
+            # print("DEBUG: after cnn shape:", after_cnn.shape)
+            n_flatten = after_cnn.shape[1]  # ?
+        
+        self.linear = nn.Sequential(nn.Linear(n_flatten, action_shape), nn.ReLU())
+
+    def forward(self, obs, state=None, info={}):
+        transform = torchvision.transforms.Compose([
+                torchvision.transforms.ToTensor()
+            ])
+        obs_tensor = []
+        for o in obs:
+            obs_tensor.append(transform(o))
+        obs = torch.stack(tensors=obs_tensor, dim=0)
+        # print("DEBUG: obs shape", obs.shape)
+        if not isinstance(obs, torch.Tensor):
+            obs = torch.tensor(obs, dtype=torch.float)
+        logits = self.linear(self.cnn(obs))
+        return logits, state

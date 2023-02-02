@@ -7,7 +7,7 @@ from os import path as os_path
 import torch
 import numpy as np
 from scipy import interpolate
-from model import CNN_DQN
+from model import CNN_DQN, CNNDQN
 
 from tianshou.data import Collector, VectorReplayBuffer
 from tianshou.env import DummyVectorEnv, PettingZooEnv
@@ -56,7 +56,7 @@ def step_schedule(
 
 def get_env():
     """This function is needed to provide callables for DummyVectorEnv."""
-    env = pklot_env.raw_env(n_vehicles=4, seed=1, random_reset=False)
+    env = pklot_env.raw_env(n_vehicles=NUM_AGENT, seed=1, random_reset=False)
     env = ss.black_death_v3(env)
     env = ss.resize_v1(env, 140, 140)
     return PettingZooEnv(env)
@@ -67,12 +67,18 @@ def get_agents(
     env = get_env()
     agents = []
     for _ in range(NUM_AGENT):
-        net = CNN_DQN(
-            state_shape=58800,
-            hidden_sizes=[128, 128, 128, 128],
-            action_shape=7, #see pklot_env line 99
-            device="cuda" if torch.cuda.is_available() else "cpu",
-        ).to("cuda" if torch.cuda.is_available() else "cpu")
+        # net = CNN_DQN(
+        #     state_shape=14700, #
+        #     hidden_sizes=[128, 128, 128, 128],
+        #     action_shape=7, #see pklot_env line 99
+        #     device="cuda" if torch.cuda.is_available() else "cpu",
+        # ).to("cuda" if torch.cuda.is_available() else "cpu")
+        net = CNNDQN(
+            state_shape=(10, 3, 140, 140), 
+            action_shape=7,
+            obs = env.observation_space.sample()[None]
+            ).to("cuda" if torch.cuda.is_available() else "cpu")
+
         if optim is None:
             optim = torch.optim.Adam(net.parameters(), lr=1e-4)
         
@@ -91,6 +97,9 @@ def get_agents(
 if __name__ == "__main__":
     #https://pettingzoo.farama.org/tutorials/tianshou/intermediate/
     # ======== Step 1: Environment setup =========
+    # TODO: still don't quite get why we need dummy vectors
+    # SubprocVectorEnv: 可以试一下
+    #replay buffer 加多少东西
     train_env = DummyVectorEnv([get_env for _ in range(10)])
     test_env = DummyVectorEnv([get_env for _ in range(10)])
     
@@ -113,30 +122,39 @@ if __name__ == "__main__":
     )
     test_collector = Collector(policy, test_env, exploration_noise=True)
     # policy.set_eps(0.2)
-    train_collector.collect(n_step=64 * 10)  # batch size * training_num
+    train_collector.collect(n_step=100)  # batch size * training_num TODO
 
     # ======== Step 4: Callback functions setup =========
     def save_best_fn(policy):
         model_save_path = os.path.join("log", "rps", "dqn", "policy.pth")
         os.makedirs(os.path.join("log", "rps", "dqn"), exist_ok=True)
-        torch.save(policy.policies[agents[1]].state_dict(), model_save_path)
+        for agent in agents:
+            torch.save(policy.policies[agent].state_dict(), model_save_path)
+        #TODO resolved
 
     def stop_fn(mean_rewards):
         # currently set to never stop
         return False 
 
     def train_fn(epoch, env_step):
-        policy.policies[agents[1]].set_eps(0.2)
+        for agent in agents:
+            policy.policies[agent].set_eps(0.2)
+        #TODO resolved
+        
 
     def test_fn(epoch, env_step):
-        policy.policies[agents[1]].set_eps(0.05)
+        for agent in agents:
+            policy.policies[agent].set_eps(0.05)
+        #TODO resolved
 
     def reward_metric(rews):
-        return rews[:, 1]
+        return np.average(rews, axis=1)
+        #TODO: average resolved
+
 
     # logger:
-    logger = WandbLogger()
-    logger.load(SummaryWriter("./log/"))
+    # logger = WandbLogger()
+    # logger.load(SummaryWriter("./log/"))
 
     # ======== Step 5: Run the trainer =========
     result = offpolicy_trainer(
@@ -146,13 +164,15 @@ if __name__ == "__main__":
         max_epoch=1000,
         step_per_epoch=1000,
         step_per_collect=50,
-        episode_per_test=10,
+        episode_per_test=15,
         batch_size=64,
+        # TODO
         train_fn=train_fn,
         test_fn=test_fn,
         stop_fn=stop_fn,
         save_best_fn=save_best_fn,
         update_per_step=0.1,
+        # TODO
         test_in_train=False,
         reward_metric=reward_metric,
         logger = logger
