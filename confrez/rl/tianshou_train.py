@@ -77,6 +77,7 @@ def get_agents(
             state_shape=(10, 3, 140, 140), 
             action_shape=7,
             obs = env.observation_space.sample()[None]
+            device="cuda" if torch.cuda.is_available() else "cpu"
             ).to("cuda" if torch.cuda.is_available() else "cpu")
 
         if optim is None:
@@ -175,7 +176,7 @@ if __name__ == "__main__":
         # TODO
         test_in_train=False,
         reward_metric=reward_metric,
-        logger = logger
+        # logger = logger
     )
 
     # return result, policy.policies[agents[1]]

@@ -118,12 +118,12 @@ class CNN_DQN(Net): #TODO: nn.Module
             return logits, state
 
 class CNNDQN(nn.Module):
-    def __init__(self, state_shape, action_shape, obs) -> None:
+    def __init__(self, state_shape, action_shape, obs, device) -> None:
         super().__init__()
         transform = torchvision.transforms.Compose([
                         torchvision.transforms.ToTensor()
                     ])
-        
+        self.device = device
         self.cnn = nn.Sequential(
                 #?? (10 3 140 140)
                 nn.Conv2d(state_shape[1], 32, kernel_size=8, stride=4, padding=0),
