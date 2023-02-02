@@ -120,10 +120,10 @@ class CNN_DQN(Net): #TODO: nn.Module
 class CNNDQN(nn.Module):
     def __init__(self, state_shape, action_shape, obs, device) -> None:
         super().__init__()
+        self.device = device
         transform = torchvision.transforms.Compose([
                         torchvision.transforms.ToTensor()
                     ])
-        self.device = device
         self.cnn = nn.Sequential(
                 #?? (10 3 140 140)
                 nn.Conv2d(state_shape[1], 32, kernel_size=8, stride=4, padding=0),
@@ -141,8 +141,7 @@ class CNNDQN(nn.Module):
             # print("DEBUG: obs shape", obs_transformed.shape)
             after_cnn = self.cnn(obs_transformed.float())
             # print("DEBUG: after cnn shape:", after_cnn.shape)
-            n_flatten = after_cnn.shape[1]  # ?
-        
+            n_flatten = after_cnn.shape[1]
         self.linear = nn.Sequential(nn.Linear(n_flatten, action_shape), nn.ReLU())
 
     def forward(self, obs, state=None, info={}):
@@ -154,6 +153,7 @@ class CNNDQN(nn.Module):
             obs_tensor.append(transform(o))
         obs = torch.stack(tensors=obs_tensor, dim=0)
         # print("DEBUG: obs shape", obs.shape)
+        obs = obs.to(device = self.device)
         if not isinstance(obs, torch.Tensor):
             obs = torch.tensor(obs, dtype=torch.float)
         logits = self.linear(self.cnn(obs))

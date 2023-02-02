@@ -76,9 +76,9 @@ def get_agents(
         net = CNNDQN(
             state_shape=(10, 3, 140, 140), 
             action_shape=7,
-            obs = env.observation_space.sample()[None]
+            obs=env.observation_space.sample()[None],
             device="cuda" if torch.cuda.is_available() else "cpu"
-            ).to("cuda" if torch.cuda.is_available() else "cpu")
+        ).to("cuda" if torch.cuda.is_available() else "cpu")
 
         if optim is None:
             optim = torch.optim.Adam(net.parameters(), lr=1e-4)
@@ -154,8 +154,8 @@ if __name__ == "__main__":
 
 
     # logger:
-    # logger = WandbLogger()
-    # logger.load(SummaryWriter("./log/"))
+    logger = WandbLogger()
+    logger.load(SummaryWriter("./log/"))
 
     # ======== Step 5: Run the trainer =========
     result = offpolicy_trainer(
