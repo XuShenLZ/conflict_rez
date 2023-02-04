@@ -27,7 +27,7 @@ now = datetime.now()
 timestamp = now.strftime("%m-%d-%Y_%H-%M-%S")
 
 MODEL_NAME = "Tianshou-Multiagent"
-NUM_AGENT = 4
+NUM_AGENT = 1
 
 def step_schedule(
     initial_value: float, steps: List[float], levels: List[float]
@@ -140,17 +140,14 @@ if __name__ == "__main__":
     def train_fn(epoch, env_step):
         for agent in agents:
             policy.policies[agent].set_eps(0.2)
-        #TODO resolved
         
 
     def test_fn(epoch, env_step):
         for agent in agents:
-            policy.policies[agent].set_eps(0.05)
-        #TODO resolved
+            policy.policies[agent].set_eps(0.0)
 
     def reward_metric(rews):
         return np.average(rews, axis=1)
-        #TODO: average resolved
 
 
     # logger:
@@ -163,17 +160,15 @@ if __name__ == "__main__":
         train_collector=train_collector,
         test_collector=test_collector,
         max_epoch=1000,
-        step_per_epoch=1000,
+        step_per_epoch=200,
         step_per_collect=50,
-        episode_per_test=15,
+        episode_per_test=100,
         batch_size=64,
-        # TODO
         train_fn=train_fn,
         test_fn=test_fn,
         stop_fn=stop_fn,
         save_best_fn=save_best_fn,
         update_per_step=0.1,
-        # TODO
         test_in_train=False,
         reward_metric=reward_metric,
         logger = logger
