@@ -16,7 +16,6 @@ setuptools.setup(
         "casadi",
         "pytope",
         "pettingzoo",
-        "stable-baselines3[extra]",
         "supersuit",
         "pygame",
     ],

@@ -87,7 +87,7 @@ def get_agents(
             model=net,
             optim=optim,
             discount_factor=0.9,
-            estimation_step=100,
+            estimation_step=1, #100
             target_update_freq=320,
             lr_scheduler = step_schedule(0.0005, [1, 0.8, 0.6, 0.3], [1, 0.5, 0.1, 0.05])
         ))
@@ -99,8 +99,6 @@ if __name__ == "__main__":
     #https://pettingzoo.farama.org/tutorials/tianshou/intermediate/
     # ======== Step 1: Environment setup =========
     # TODO: still don't quite get why we need dummy vectors
-    # SubprocVectorEnv: 可以试一下
-    #replay buffer 加多少东西
     train_env = DummyVectorEnv([get_env for _ in range(10)])
     test_env = DummyVectorEnv([get_env for _ in range(10)])
     
@@ -124,7 +122,7 @@ if __name__ == "__main__":
     test_collector = Collector(policy, test_env, exploration_noise=True)
     # policy.set_eps(0.2)
     train_collector.collect(n_step=100)  # batch size * training_num TODO
-
+    
     # ======== Step 4: Callback functions setup =========
     def save_best_fn(policy):
         model_save_path = os.path.join("log", "rps", "dqn", "policy.pth")
@@ -139,7 +137,7 @@ if __name__ == "__main__":
 
     def train_fn(epoch, env_step):
         for agent in agents:
-            policy.policies[agent].set_eps(0.2)
+            policy.policies[agent].set_eps(0.7)
         
 
     def test_fn(epoch, env_step):
@@ -151,18 +149,18 @@ if __name__ == "__main__":
 
 
     # logger:
-    logger = WandbLogger()
-    logger.load(SummaryWriter("./log/"))
+    # logger = WandbLogger()
+    # logger.load(SummaryWriter("./log/"))
 
     # ======== Step 5: Run the trainer =========
     result = offpolicy_trainer(
         policy=policy,
         train_collector=train_collector,
         test_collector=test_collector,
-        max_epoch=1000,
+        max_epoch=1000, 
         step_per_epoch=200,
         step_per_collect=50,
-        episode_per_test=100,
+        episode_per_test=100, 
         batch_size=64,
         train_fn=train_fn,
         test_fn=test_fn,
@@ -171,7 +169,7 @@ if __name__ == "__main__":
         update_per_step=0.1,
         test_in_train=False,
         reward_metric=reward_metric,
-        logger = logger
+        # logger = logger
     )
 
     # return result, policy.policies[agents[1]]

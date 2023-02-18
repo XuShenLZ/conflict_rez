@@ -642,7 +642,7 @@ class parallel_env(ParallelEnv, EzPickle):
                     rewards[agent] += -1e3
                 elif self.reach_goal(agent):
                     # If reach the goal, the agent will be done and get huge reward
-                    truncations[agent] = True
+                    terminations[agent] = True
                     rewards[agent] += 1e4
 
             for agent in agents_with_collision:
@@ -671,13 +671,13 @@ class parallel_env(ParallelEnv, EzPickle):
 
         # If it reaches, mark all active agents as done
         if self.cycle_done:
-            terminations = {agent: True for agent in self.agents}
+            truncations = {agent: True for agent in self.agents}
 
         # For agents that are done, un-register them from the occupancy dict
         for agent in self.agents:
-            if truncations[agent]:
+            if terminations[agent]:
                 self.unregister_agent(agent)
 
         # Remove the done agents from the active agent list. This will only affect next iteration
-        self.agents = [agent for agent in self.agents if not truncations[agent]]
+        self.agents = [agent for agent in self.agents if not terminations[agent]]
         return observations, rewards, terminations, truncations, infos
