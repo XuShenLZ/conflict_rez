@@ -142,7 +142,7 @@ class CNNDQN(nn.Module):
             after_cnn = self.cnn(obs_transformed.float())
             # print("DEBUG: after cnn shape:", after_cnn.shape)
             n_flatten = after_cnn.shape[1]
-        self.linear = nn.Sequential(nn.Linear(n_flatten, action_shape), nn.ReLU())
+        self.linear = nn.Linear(n_flatten, action_shape)
 
     def forward(self, obs, state=None, info={}):
         transform = torchvision.transforms.Compose([

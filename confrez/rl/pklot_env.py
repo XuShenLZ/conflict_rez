@@ -624,26 +624,26 @@ class parallel_env(ParallelEnv, EzPickle):
             for agent in self.agents:
                 hit_wall = self.move(agent=agent, action=actions[agent])
                 if hit_wall:
-                    rewards[agent] += -1e3
+                    rewards[agent] += -1e1
 
             agents_with_collision = set()
             # Check collision or goal completion and apply costs
             for agent in self.agents:
                 # The time cost for vehicle
-                rewards[agent] += -1
+                rewards[agent] += -1e-2
 
                 if actions[agent] == 0:
                     # If the vehicle remain stationary, it will get a small penalty
-                    rewards[agent] += -10
+                    rewards[agent] += -1e-1
                 # All the following situations mean that the vehicle moves
                 elif self.has_collision(agent):
                     # If collide with other agents, mark the agent name and apply huge penalty
                     agents_with_collision.add(agent)
-                    rewards[agent] += -1e3
+                    rewards[agent] += -1e1
                 elif self.reach_goal(agent):
                     # If reach the goal, the agent will be done and get huge reward
                     truncations[agent] = True
-                    rewards[agent] += 1e4
+                    rewards[agent] += 1e2
 
             for agent in agents_with_collision:
                 self.move(agent, self.reverse_action(actions[agent]))
