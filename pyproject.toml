@@ -1,0 +1,30 @@
+[tool.poetry]
+name = "conflict-rez"
+version = "0.1.0"
+description = "RL and optimal control for conflict resolution in tightly constrained environments"
+authors = ["Xu Shen <xu_shen@berkeley.edu>"]
+license = "GPL-3.0"
+readme = "README.md"
+packages = [{ include = "conflict_rez" }]
+
+[tool.poetry.dependencies]
+python = ">=3.8,<3.12"
+black = "^23.1.0"
+numpy = "^1.24.2"
+scipy = "^1.10.1"
+matplotlib = "^3.7.0"
+seaborn = "^0.12.2"
+casadi = "3.5.5"
+pytope = "^0.0.4"
+PettingZoo = "^1.22.3"
+SuperSuit = "^3.7.1"
+pygame = "^2.1.3"
+torch = "^1.13.1"
+torchvision = "^0.14.1"
+gymnasium = "^0.27.1"
+tianshou = "^0.4.11"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
