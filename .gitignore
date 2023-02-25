@@ -1,3 +1,6 @@
+# Model
+*.pth
+
 # Results
 *.pdf
 *.png
