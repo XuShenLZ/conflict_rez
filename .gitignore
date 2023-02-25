@@ -3,6 +3,9 @@ install/
 build/
 log/
 
+# Model
+*.pth
+
 # Results
 *.pdf
 *.png
@@ -20,6 +23,7 @@ events.out.tfevents*
 
 # IDE
 .vscode/
+.DS_Store
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
