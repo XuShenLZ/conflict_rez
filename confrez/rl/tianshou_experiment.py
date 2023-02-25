@@ -13,6 +13,6 @@ for agent in agents:
 for agent in agents:
     policy.policies[agent].set_eps(0)
 collector = Collector(policy, env, exploration_noise=True)
-result = collector.collect(n_episode=10, render=5)
+result = collector.collect(n_episode=1, render=1/1000)
 rews, lens = result["rews"], result["lens"]
 print(f"Final reward: {rews[:].mean()}, length: {lens.mean()}")
