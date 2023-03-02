@@ -7,25 +7,26 @@ from os import path as os_path
 import torch
 import numpy as np
 from scipy import interpolate
-from model import CNNDQN
+from model import Actor, Critic
 
 from tianshou.data import Collector, VectorReplayBuffer
 from tianshou.env import DummyVectorEnv, PettingZooEnv
 from torch.utils.tensorboard import SummaryWriter
 from tianshou.utils import TensorboardLogger
 
-from tianshou.policy import BasePolicy, DQNPolicy, MultiAgentPolicyManager
-from tianshou.trainer import offpolicy_trainer
+from tianshou.policy import BasePolicy, PPOPolicy, MultiAgentPolicyManager
+from tianshou.trainer import onpolicy_trainer
 
 from tianshou.utils import WandbLogger
 from torch.utils.tensorboard import SummaryWriter
+from torch.distributions import Categorical
 
 cwd = os_path.dirname(__file__)
 now = datetime.now()
 timestamp = now.strftime("%m-%d-%Y_%H-%M-%S")
 
-MODEL_NAME = "Tianshou-Multiagent"
-NUM_AGENT = 4
+MODEL_NAME = "Tianshou-Multiagent-PPO"
+NUM_AGENT = 1
 
 
 def step_schedule(
@@ -55,7 +56,7 @@ def step_schedule(
 
 def get_env():
     """This function is needed to provide callables for DummyVectorEnv."""
-    env = pklot_env.raw_env(n_vehicles=NUM_AGENT, random_reset=False, seed=1)  # seed=1
+    env = pklot_env.raw_env(n_vehicles=NUM_AGENT, random_reset=False)  # seed=1
     env = ss.black_death_v3(env)
     env = ss.resize_v1(env, 140, 140)
     return PettingZooEnv(env)
@@ -67,29 +68,31 @@ def get_agents(
     env = get_env()
     agents = []
     for _ in range(NUM_AGENT):
-        net = CNNDQN(
+        actor = Actor(
             state_shape=(10, 3, 140, 140),
             action_shape=7,
             obs=env.observation_space.sample()[None],
             device="cuda" if torch.cuda.is_available() else "cpu",
         ).to("cuda" if torch.cuda.is_available() else "cpu")
 
-        if optim is None:
-            optim = torch.optim.Adam(net.parameters(), lr=1e-4)
+        critic = Critic(
+            state_shape=(10, 3, 140, 140),
+            obs=env.observation_space.sample()[None],
+            device="cuda" if torch.cuda.is_available() else "cpu",
+        ).to("cuda" if torch.cuda.is_available() else "cpu")
 
+        if optim is None:
+            optim = torch.optim.Adam(list(actor.parameters()) + list(critic.parameters()), lr=1e-4)
 
         agents.append(
-            DQNPolicy(
-                model=net,
+            PPOPolicy(
+                actor=actor,
+                critic=critic,
                 optim=optim,
                 discount_factor=0.99,
-                estimation_step=1,
-                target_update_freq=10000,  # update_per_step * number of env steps before updating target
-                # reward_normalization=True,
-                clip_loss_grad=True,
-                # lr_scheduler=step_schedule(
-                #     0.0005, [1, 0.8, 0.6, 0.3], [1, 0.5, 0.1, 0.05]
-                # ),
+                dist_fn=Categorical,
+                ent_coef=0.01,
+                max_grad_norm=0.5
             )
         )
 
@@ -101,8 +104,8 @@ if __name__ == "__main__":
     # https://pettingzoo.farama.org/tutorials/tianshou/intermediate/
     # ======== Step 1: Environment setup =========
     # TODO: still don't quite get why we need dummy vectors
-    train_env = DummyVectorEnv([get_env for _ in range(10)])
-    test_env = DummyVectorEnv([get_env for _ in range(10)])
+    train_env = DummyVectorEnv([get_env for _ in range(20)])
+    test_env = DummyVectorEnv([get_env for _ in range(20)])
 
     # seed
     seed = 42
@@ -117,13 +120,9 @@ if __name__ == "__main__":
     train_collector = Collector(
         policy,
         train_env,
-        VectorReplayBuffer(100000, len(train_env)),
-        exploration_noise=True,
+        exploration_noise=True
     )
     test_collector = Collector(policy, test_env)
-    # policy.set_eps(0.2)
-    train_collector.collect(n_episode=20)  # batch size * training_num TODO
-
 
     # ======== Step 4: Callback functions setup =========
 
@@ -141,21 +140,11 @@ if __name__ == "__main__":
 
 
     def train_fn(epoch, env_step):
-        # print(env_step, policy.policies[agents[0]]._iter)
-        for agent in agents:
-            policy.policies[agent].set_eps(max(0.98 ** epoch, 0.1))
+        return
 
 
     def test_fn(epoch, env_step):
-        for agent in agents:
-            policy.policies[agent].set_eps(0.0)
-
-
-        # temp = policy.policies[agents[0]]
-        # temp.eval()
-        # temp.set_eps(0.0)
-        # collector = Collector(policy, train_env, exploration_noise=True)
-        # collector.collect(n_episode=1, render=1 / 35)
+        return
 
 
     def reward_metric(rews):
@@ -164,27 +153,27 @@ if __name__ == "__main__":
 
     # logger:
     # script_path = os.path.dirname(os.path.abspath(__file__))
-    # log_path = os.path.join(script_path, f"log/dqn/run{timestamp}")
+    # log_path = os.path.join(script_path, f"log/ppo/run{timestamp}")
     # writer = SummaryWriter(log_path)
     # logger = TensorboardLogger(writer)
     logger = WandbLogger()
-    logger.load(SummaryWriter("./log/"))
+    logger.load(SummaryWriter("./log/ppo{timestamp}"))
 
     # ======== Step 5: Run the trainer =========
-    result = offpolicy_trainer(
+    result = onpolicy_trainer(
         policy=policy,
         train_collector=train_collector,
         test_collector=test_collector,
         max_epoch=1000,
         step_per_epoch=200,
-        step_per_collect=50,
-        episode_per_test=100,
-        batch_size=64,
+        step_per_collect=4000,
+        episode_per_test=20,
+        batch_size=128,
         train_fn=train_fn,
         test_fn=test_fn,
         stop_fn=stop_fn,
         save_best_fn=save_best_fn,
-        update_per_step=0.25,
+        repeat_per_collect=10,
         test_in_train=False,
         reward_metric=reward_metric,
         logger=logger,
