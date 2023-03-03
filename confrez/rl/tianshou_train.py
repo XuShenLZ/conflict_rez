@@ -7,9 +7,9 @@ from os import path as os_path
 import torch
 import numpy as np
 from scipy import interpolate
-from model import CNNDQN
+from model import CNNDQN, DuelingDQN
 
-from tianshou.data import Collector, VectorReplayBuffer
+from tianshou.data import Collector, VectorReplayBuffer, PrioritizedVectorReplayBuffer
 from tianshou.env import DummyVectorEnv, PettingZooEnv
 from torch.utils.tensorboard import SummaryWriter
 from tianshou.utils import TensorboardLogger
@@ -25,7 +25,7 @@ now = datetime.now()
 timestamp = now.strftime("%m-%d-%Y_%H-%M-%S")
 
 MODEL_NAME = "Tianshou-Multiagent"
-NUM_AGENT = 4
+NUM_AGENT = 1
 
 
 def step_schedule(
@@ -67,7 +67,7 @@ def get_agents(
     env = get_env()
     agents = []
     for _ in range(NUM_AGENT):
-        net = CNNDQN(
+        net = DuelingDQN(
             state_shape=(10, 3, 140, 140),
             action_shape=7,
             obs=env.observation_space.sample()[None],
@@ -75,8 +75,7 @@ def get_agents(
         ).to("cuda" if torch.cuda.is_available() else "cpu")
 
         if optim is None:
-            optim = torch.optim.Adam(net.parameters(), lr=1e-4)
-
+            optim = torch.optim.Adam(net.parameters(), lr=1e-4)  # , eps=1.5e-4
 
         agents.append(
             DQNPolicy(
@@ -84,12 +83,8 @@ def get_agents(
                 optim=optim,
                 discount_factor=0.99,
                 estimation_step=1,
-                target_update_freq=10000,  # update_per_step * number of env steps before updating target
-                # reward_normalization=True,
+                target_update_freq=int(10000),  # update_per_step * number of env steps before updating target
                 clip_loss_grad=True,
-                # lr_scheduler=step_schedule(
-                #     0.0005, [1, 0.8, 0.6, 0.3], [1, 0.5, 0.1, 0.05]
-                # ),
             )
         )
 
@@ -117,12 +112,14 @@ if __name__ == "__main__":
     train_collector = Collector(
         policy,
         train_env,
-        VectorReplayBuffer(100000, len(train_env)),
+        PrioritizedVectorReplayBuffer(100000, len(train_env), alpha=0.5, beta=0.4),
+        # VectorReplayBuffer(100000, len(train_env)),
         exploration_noise=True,
     )
     test_collector = Collector(policy, test_env)
-    # policy.set_eps(0.2)
-    train_collector.collect(n_episode=20)  # batch size * training_num TODO
+    for agent in agents:
+        policy.policies[agent].set_eps(1)
+    train_collector.collect(n_episode=50)  # batch size * training_num TODO
 
 
     # ======== Step 4: Callback functions setup =========
@@ -143,19 +140,13 @@ if __name__ == "__main__":
     def train_fn(epoch, env_step):
         # print(env_step, policy.policies[agents[0]]._iter)
         for agent in agents:
-            policy.policies[agent].set_eps(max(0.98 ** epoch, 0.1))
+            policy.policies[agent].set_eps(max(0.99 ** epoch, 0.1))
+            train_collector.buffer.set_beta(min(0.4 * 1.01 ** epoch, 1))
 
 
     def test_fn(epoch, env_step):
         for agent in agents:
             policy.policies[agent].set_eps(0.0)
-
-
-        # temp = policy.policies[agents[0]]
-        # temp.eval()
-        # temp.set_eps(0.0)
-        # collector = Collector(policy, train_env, exploration_noise=True)
-        # collector.collect(n_episode=1, render=1 / 35)
 
 
     def reward_metric(rews):
@@ -167,7 +158,7 @@ if __name__ == "__main__":
     # log_path = os.path.join(script_path, f"log/dqn/run{timestamp}")
     # writer = SummaryWriter(log_path)
     # logger = TensorboardLogger(writer)
-    logger = WandbLogger()
+    logger = WandbLogger(project="confrez-tianshou")
     logger.load(SummaryWriter("./log/"))
 
     # ======== Step 5: Run the trainer =========
@@ -175,16 +166,16 @@ if __name__ == "__main__":
         policy=policy,
         train_collector=train_collector,
         test_collector=test_collector,
-        max_epoch=1000,
+        max_epoch=2000,
         step_per_epoch=200,
         step_per_collect=50,
-        episode_per_test=100,
+        episode_per_test=10,
         batch_size=64,
         train_fn=train_fn,
         test_fn=test_fn,
         stop_fn=stop_fn,
         save_best_fn=save_best_fn,
-        update_per_step=0.25,
+        update_per_step=1,
         test_in_train=False,
         reward_metric=reward_metric,
         logger=logger,
