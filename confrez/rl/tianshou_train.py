@@ -56,7 +56,7 @@ def step_schedule(
 def get_env():
     """This function is needed to provide callables for DummyVectorEnv."""
     env = pklot_env.raw_env(
-        n_vehicles=NUM_AGENT, random_reset=False, seed=1, max_cycle=100
+        n_vehicles=NUM_AGENT, random_reset=False, seed=1, max_cycles=100
     )  # seed=1
     env = ss.black_death_v3(env)
     env = ss.resize_v1(env, 140, 140)
