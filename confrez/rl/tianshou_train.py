@@ -25,11 +25,11 @@ now = datetime.now()
 timestamp = now.strftime("%m-%d-%Y_%H-%M-%S")
 
 MODEL_NAME = "Tianshou-Multiagent"
-NUM_AGENT = 1
+NUM_AGENT = 4
 
 
 def step_schedule(
-        initial_value: float, steps: List[float], levels: List[float]
+    initial_value: float, steps: List[float], levels: List[float]
 ) -> Callable[[float], float]:
     """
     Step learning rate schedule.
@@ -55,14 +55,16 @@ def step_schedule(
 
 def get_env():
     """This function is needed to provide callables for DummyVectorEnv."""
-    env = pklot_env.raw_env(n_vehicles=NUM_AGENT, random_reset=False, seed=1)  # seed=1
+    env = pklot_env.raw_env(
+        n_vehicles=NUM_AGENT, random_reset=False, seed=1, max_cycle=100
+    )  # seed=1
     env = ss.black_death_v3(env)
     env = ss.resize_v1(env, 140, 140)
     return PettingZooEnv(env)
 
 
 def get_agents(
-        optim: Optional[torch.optim.Optimizer] = None,
+    optim: Optional[torch.optim.Optimizer] = None,
 ) -> Tuple[BasePolicy, torch.optim.Optimizer, list]:
     env = get_env()
     agents = []
@@ -75,7 +77,7 @@ def get_agents(
         ).to("cuda" if torch.cuda.is_available() else "cpu")
 
         if optim is None:
-            optim = torch.optim.Adam(net.parameters(), lr=1e-4)  # , eps=1.5e-4
+            optim = torch.optim.Adam(net.parameters(), lr=1e-5)  # , eps=1.5e-4
 
         agents.append(
             DQNPolicy(
@@ -83,7 +85,9 @@ def get_agents(
                 optim=optim,
                 discount_factor=0.99,
                 estimation_step=1,
-                target_update_freq=int(10000),  # update_per_step * number of env steps before updating target
+                target_update_freq=int(
+                    10000
+                ),  # update_per_step * number of env steps before updating target
                 clip_loss_grad=True,
             )
         )
@@ -96,8 +100,8 @@ if __name__ == "__main__":
     # https://pettingzoo.farama.org/tutorials/tianshou/intermediate/
     # ======== Step 1: Environment setup =========
     # TODO: still don't quite get why we need dummy vectors
-    train_env = DummyVectorEnv([get_env for _ in range(10)])
-    test_env = DummyVectorEnv([get_env for _ in range(10)])
+    train_env = DummyVectorEnv([get_env for _ in range(1)])
+    test_env = DummyVectorEnv([get_env for _ in range(1)])
 
     # seed
     seed = 42
@@ -112,7 +116,7 @@ if __name__ == "__main__":
     train_collector = Collector(
         policy,
         train_env,
-        PrioritizedVectorReplayBuffer(100000, len(train_env), alpha=0.5, beta=0.4),
+        PrioritizedVectorReplayBuffer(100000 * 10, len(train_env), alpha=0.5, beta=0.4),
         # VectorReplayBuffer(100000, len(train_env)),
         exploration_noise=True,
     )
@@ -120,7 +124,6 @@ if __name__ == "__main__":
     for agent in agents:
         policy.policies[agent].set_eps(1)
     train_collector.collect(n_episode=50)  # batch size * training_num TODO
-
 
     # ======== Step 4: Callback functions setup =========
 
@@ -131,27 +134,22 @@ if __name__ == "__main__":
             torch.save(policy.policies[agent].state_dict(), model_save_path)
         # TODO resolved
 
-
     def stop_fn(mean_rewards):
         # currently set to never stop
         return False
 
-
     def train_fn(epoch, env_step):
         # print(env_step, policy.policies[agents[0]]._iter)
         for agent in agents:
-            policy.policies[agent].set_eps(max(0.99 ** epoch, 0.1))
-            train_collector.buffer.set_beta(min(0.4 * 1.01 ** epoch, 1))
-
+            policy.policies[agent].set_eps(max(0.99**epoch, 0.1))
+            train_collector.buffer.set_beta(min(0.4 * 1.01**epoch, 1))
 
     def test_fn(epoch, env_step):
         for agent in agents:
             policy.policies[agent].set_eps(0.0)
 
-
     def reward_metric(rews):
         return np.average(rews, axis=1)
-
 
     # logger:
     # script_path = os.path.dirname(os.path.abspath(__file__))
@@ -169,13 +167,13 @@ if __name__ == "__main__":
         max_epoch=2000,
         step_per_epoch=200,
         step_per_collect=50,
-        episode_per_test=10,
+        episode_per_test=1,
         batch_size=64,
         train_fn=train_fn,
         test_fn=test_fn,
         stop_fn=stop_fn,
         save_best_fn=save_best_fn,
-        update_per_step=1,
+        update_per_step=0.2,
         test_in_train=False,
         reward_metric=reward_metric,
         logger=logger,
