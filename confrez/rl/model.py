@@ -145,7 +145,7 @@ class Actor(nn.Module):
             nn.Linear(n_flatten, feature_dim),
             nn.ReLU(),
             nn.Linear(feature_dim, action_shape),
-            nn.Softmax(dim=1)
+            nn.Softmax(dim=-1)
         )
 
     def forward(self, obs, state=None, info={}):
