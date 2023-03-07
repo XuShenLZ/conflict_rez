@@ -56,7 +56,7 @@ def step_schedule(
 def get_env():
     """This function is needed to provide callables for DummyVectorEnv."""
     env = pklot_env.raw_env(
-        n_vehicles=NUM_AGENT, random_reset=False, seed=1, max_cycles=100
+        n_vehicles=NUM_AGENT, random_reset=False, seed=1, max_cycles=200
     )  # seed=1
     env = ss.black_death_v3(env)
     env = ss.resize_v1(env, 140, 140)
@@ -86,10 +86,10 @@ def get_agents(
                 discount_factor=0.99,
                 estimation_step=1,
                 target_update_freq=int(
-                    10000
+                    32000
                 ),  # update_per_step * number of env steps before updating target
                 clip_loss_grad=True,
-            )
+            ).to("cuda" if torch.cuda.is_available() else "cpu")
         )
 
     policy = MultiAgentPolicyManager(agents, env)
@@ -116,7 +116,7 @@ if __name__ == "__main__":
     train_collector = Collector(
         policy,
         train_env,
-        PrioritizedVectorReplayBuffer(100000 * 10, len(train_env), alpha=0.5, beta=0.4),
+        PrioritizedVectorReplayBuffer(400000, len(train_env), alpha=0.5, beta=0.4),
         # VectorReplayBuffer(100000, len(train_env)),
         exploration_noise=True,
     )
@@ -128,15 +128,14 @@ if __name__ == "__main__":
     # ======== Step 4: Callback functions setup =========
 
     def save_best_fn(policy):
-        model_save_path = os.path.join("log", "rps", "dqn", "policy.pth")
-        os.makedirs(os.path.join("log", "rps", "dqn"), exist_ok=True)
+        model_save_path = os.path.join("log", "dqn", "policy.pth")
+        os.makedirs(os.path.join("log", "dqn"), exist_ok=True)
         for agent in agents:
             torch.save(policy.policies[agent].state_dict(), model_save_path)
-        # TODO resolved
 
     def stop_fn(mean_rewards):
         # currently set to never stop
-        return False
+        return mean_rewards >= 9000
 
     def train_fn(epoch, env_step):
         # print(env_step, policy.policies[agents[0]]._iter)
@@ -149,15 +148,15 @@ if __name__ == "__main__":
             policy.policies[agent].set_eps(0.0)
 
     def reward_metric(rews):
-        return np.average(rews, axis=1)
+        return np.max(rews, axis=1)
 
     # logger:
-    # script_path = os.path.dirname(os.path.abspath(__file__))
-    # log_path = os.path.join(script_path, f"log/dqn/run{timestamp}")
-    # writer = SummaryWriter(log_path)
-    # logger = TensorboardLogger(writer)
-    logger = WandbLogger(project="confrez-tianshou")
-    logger.load(SummaryWriter("./log/"))
+    script_path = os.path.dirname(os.path.abspath(__file__))
+    log_path = os.path.join(script_path, f"log/dqn/run{timestamp}")
+    writer = SummaryWriter(log_path)
+    logger = TensorboardLogger(writer)
+    # logger = WandbLogger(project="confrez-tianshou")
+    # logger.load(SummaryWriter("./log/"))
 
     # ======== Step 5: Run the trainer =========
     result = offpolicy_trainer(
@@ -168,7 +167,7 @@ if __name__ == "__main__":
         step_per_epoch=200,
         step_per_collect=50,
         episode_per_test=1,
-        batch_size=64,
+        batch_size=64 * NUM_AGENT,
         train_fn=train_fn,
         test_fn=test_fn,
         stop_fn=stop_fn,
