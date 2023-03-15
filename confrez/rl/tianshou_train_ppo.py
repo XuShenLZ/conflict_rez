@@ -10,7 +10,7 @@ from scipy import interpolate
 from model import Actor, Critic
 
 from tianshou.data import Collector, VectorReplayBuffer
-from tianshou.env import DummyVectorEnv, PettingZooEnv
+from tianshou.env import DummyVectorEnv, PettingZooEnv, SubprocVectorEnv
 from tianshou.utils.net.common import ActorCritic
 
 from tianshou.policy import BasePolicy, PPOPolicy, MultiAgentPolicyManager
@@ -108,8 +108,8 @@ if __name__ == "__main__":
     # https://pettingzoo.farama.org/tutorials/tianshou/intermediate/
     # ======== Step 1: Environment setup =========
     # TODO: still don't quite get why we need dummy vectors
-    train_env = DummyVectorEnv([get_env for _ in range(40)])
-    test_env = DummyVectorEnv([get_env for _ in range(20)])
+    train_env = SubprocVectorEnv([get_env for _ in range(1)])
+    test_env = SubprocVectorEnv([get_env for _ in range(1)])
 
     # seed
     seed = 42
@@ -188,14 +188,14 @@ if __name__ == "__main__":
         test_collector=test_collector,
         max_epoch=1000,
         step_per_epoch=200,
-        step_per_collect=4000,
-        episode_per_test=20,
+        step_per_collect=2000,
+        episode_per_test=10,
         batch_size=64,
         train_fn=train_fn,
         test_fn=test_fn,
         stop_fn=stop_fn,
         save_best_fn=save_best_fn,
-        repeat_per_collect=40,
+        repeat_per_collect=30,
         test_in_train=False,
         reward_metric=reward_metric,
         logger=logger,
