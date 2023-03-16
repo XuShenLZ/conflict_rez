@@ -27,6 +27,7 @@ from datetime import datetime
 from os import path as os_path
 import torch
 import numpy as np
+import wandb
 from scipy import interpolate
 from model import CNNDQN, DuelingDQN
 
@@ -40,6 +41,11 @@ from tianshou.trainer import offpolicy_trainer
 
 from tianshou.utils import WandbLogger
 from torch.utils.tensorboard import SummaryWriter
+from tianshou_experiment import render
+
+cwd = os_path.dirname(__file__)
+now = datetime.now()
+timestamp = now.strftime("%m-%d-%Y_%H-%M-%S")
 
 
 def get_parser() -> argparse.ArgumentParser:
@@ -194,9 +200,9 @@ def train_agent(
     test_collector = Collector(policy, test_envs, exploration_noise=True)
     train_collector.collect(n_step=args.batch_size * args.training_num)
 
-    logger = WandbLogger(project="confrez-tianshou", name=f"rainbow_pistonballcode", save_interval=10)
+    logger = WandbLogger(project="confrez-tianshou", name=f"rainbow_pistonballcode{timestamp}", save_interval=10)
     script_path = os.path.dirname(os.path.abspath(__file__))
-    log_path = os.path.join(script_path, f"log/dqn/pistonballcode")
+    log_path = os.path.join(script_path, f"log/dqn/pistonballcode{timestamp}")
     writer = SummaryWriter(log_path)
     logger.load(writer)
 
@@ -206,12 +212,14 @@ def train_agent(
             model_save_path = os.path.join("log", "dqn", f"policy{i}.pth")
             torch.save(policy.policies[agent].state_dict(), model_save_path)
             logger.wandb_run.save(model_save_path)
+        render(agents, policy)
+        logger.wandb_run.log({'video': wandb.Video('out.gif', fps=4, format='gif')})
 
     def stop_fn(mean_rewards):
-        return mean_rewards > 9000
+        return mean_rewards > 9800
 
     def train_fn(epoch, env_step):
-        [agent.set_eps(max(0.97 ** epoch, 0.1)) for agent in policy.policies.values()]
+        [agent.set_eps(max(0.99 ** epoch, 0.1)) for agent in policy.policies.values()]
 
     def test_fn(epoch, env_step):
         [agent.set_eps(args.eps_test) for agent in policy.policies.values()]
