@@ -1,12 +1,57 @@
 import torch
 from tianshou.data import Collector, VectorReplayBuffer
-from tianshou_train import *
 from tianshou.data import Batch, to_numpy
 import PIL
+import os
+import pklot_env
+import supersuit as ss
+from tianshou.env import PettingZooEnv, DummyVectorEnv
 from PIL import Image
+import numpy as np
+from model import DuelingDQN
+from tianshou.policy import DQNPolicy, MultiAgentPolicyManager
 
 
-def render_human():
+def get_agents():
+    env = get_env()
+    agents = []
+    for _ in range(4):
+        net = DuelingDQN(
+            state_shape=(10, 3, 140, 140),
+            action_shape=7,
+            obs=env.observation_space.sample()[None],
+            device="cuda" if torch.cuda.is_available() else "cpu",
+        ).to("cuda" if torch.cuda.is_available() else "cpu")
+
+        optim = torch.optim.Adam(net.parameters(), lr=1e-4)  # , eps=1.5e-4
+
+        agents.append(
+            DQNPolicy(
+                model=net,
+                optim=optim,
+                discount_factor=0.9,
+                estimation_step=4,
+                target_update_freq=int(
+                    5000
+                ),
+            ).to("cuda" if torch.cuda.is_available() else "cpu")
+        )
+
+    policy = MultiAgentPolicyManager(agents, env)
+    return policy, env.agents
+
+
+def get_env(render_mode="human"):
+    """This function is needed to provide callables for DummyVectorEnv."""
+    env = pklot_env.raw_env(
+        n_vehicles=4, random_reset=False, seed=1, max_cycles=500, render_mode=render_mode
+    )  # seed=1
+    env = ss.black_death_v3(env)
+    env = ss.resize_v1(env, 140, 140)
+    return PettingZooEnv(env)
+
+
+def render_human(agents, policy):
     for i, agent in enumerate(agents):
         # shouldn't be in this way when num_agents > 1!
         filename = os.path.join("log", "dqn", f"policy{i}.pth")
@@ -20,7 +65,7 @@ def render_human():
 
 
 def render(agents, policy):
-    env = get_env()
+    env = get_env(render_mode='rgb_array')
     frame_list = []
     obs = env.reset()
     obs = np.array([obs['obs']])
@@ -33,7 +78,7 @@ def render(agents, policy):
             act = to_numpy(q.max(dim=1)[1])
             obs, reward, done, _, _ = env.step(act)
             obs = np.array([obs['obs']])
-            frame_list.append(PIL.Image.fromarray(env.env.env.env.env.env.aec_env.env.env.render('rgb_array')))
+            frame_list.append(PIL.Image.fromarray(env.render()))
             total_reward += np.sum(reward)
 
     env.close()
@@ -43,7 +88,7 @@ def render(agents, policy):
 if __name__ == '__main__':
     # render_human()
     env = DummyVectorEnv([get_env])
-    policy, optim, agents = get_agents()
+    policy, agents = get_agents()
 
     for i, agent in enumerate(agents):
         # shouldn't be in this way when num_agents > 1!

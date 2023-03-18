@@ -20,7 +20,9 @@ from tianshou.trainer import offpolicy_trainer
 from tianshou.utils.net.common import Net
 
 from tianshou.utils import WandbLogger
+import wandb
 from torch.utils.tensorboard import SummaryWriter
+from tianshou_experiment import render
 
 cwd = os_path.dirname(__file__)
 now = datetime.now()
@@ -56,21 +58,20 @@ def step_schedule(
     return func
 
 
-def get_env():
+def get_env(render_mode="human"):
     """This function is needed to provide callables for DummyVectorEnv."""
     env = pklot_env.raw_env(
-        n_vehicles=NUM_AGENT, random_reset=False, seed=1, max_cycles=500
+        n_vehicles=NUM_AGENT, random_reset=False, seed=1, max_cycles=500, render_mode=render_mode
     )  # seed=1
     env = ss.black_death_v3(env)
     env = ss.resize_v1(env, 140, 140)
     return PettingZooEnv(env)
 
 
-def get_agents(
-    optim: Optional[torch.optim.Optimizer] = None,
-) -> Tuple[BasePolicy, torch.optim.Optimizer, list]:
+def get_agents() -> Tuple[BasePolicy, List[torch.optim.Optimizer], list]:
     env = get_env()
     agents = []
+    optims = []
     for _ in range(NUM_AGENT):
         net = DuelingDQN(
             state_shape=(10, 3, 140, 140),
@@ -79,59 +80,23 @@ def get_agents(
             device="cuda" if torch.cuda.is_available() else "cpu",
         ).to("cuda" if torch.cuda.is_available() else "cpu")
 
-        if optim is None:
-            optim = torch.optim.Adam(net.parameters(), lr=1e-5)  # , eps=1.5e-4
+        optim = torch.optim.Adam(net.parameters(), lr=1e-4)  # , eps=1.5e-4
+        optims.append(optim)
 
         agents.append(
             DQNPolicy(
                 model=net,
                 optim=optim,
-                discount_factor=0.99,
+                discount_factor=0.9,
                 estimation_step=4,
                 target_update_freq=int(
                     5000
-                ),  # update_per_step * number of env steps before updating target
-                clip_loss_grad=True,
+                ),
             ).to("cuda" if torch.cuda.is_available() else "cpu")
         )
 
     policy = MultiAgentPolicyManager(agents, env)
-    return policy, optim, env.agents
-
-# def get_agents(
-#         agents: Optional[List[BasePolicy]] = None,
-#         optims: Optional[List[torch.optim.Optimizer]] = None,
-# ) -> Tuple[BasePolicy, List[torch.optim.Optimizer], List]:
-#     env = get_env()
-#     observation_space = env.observation_space['observation'] if isinstance(
-#         env.observation_space, gym.spaces.Dict
-#     ) else env.observation_space
-#     state_shape = observation_space.shape or observation_space.n
-#     action_shape = env.action_space.shape or env.action_space.n
-#     if agents is None:
-#         agents = []
-#         optims = []
-#         for _ in range(NUM_AGENT):
-#             # model
-#             net = Net(
-#                 state_shape,
-#                 action_shape,
-#                 hidden_sizes=[64, 64],
-#                 device=device
-#             ).to(device)
-#             optim = torch.optim.Adam(net.parameters(), lr=1e-4)
-#             agent = DQNPolicy(
-#                 net,
-#                 optim,
-#                 0.99,
-#                 4,
-#                 target_update_freq=5000
-#             )
-#             agents.append(agent)
-#             optims.append(optim)
-#
-#     policy = MultiAgentPolicyManager(agents, env)
-#     return policy, optims, env.agents
+    return policy, optims, env.agents
 
 
 if __name__ == "__main__":
@@ -154,27 +119,37 @@ if __name__ == "__main__":
     train_collector = Collector(
         policy,
         train_env,
-        PrioritizedVectorReplayBuffer(100000, len(train_env), alpha=0.5, beta=0.4),
-        # VectorReplayBuffer(100000, len(train_env)),
+        # PrioritizedVectorReplayBuffer(100000, len(train_env), alpha=0.5, beta=0.4),
+        VectorReplayBuffer(100000, len(train_env)),
         exploration_noise=True,
     )
     test_collector = Collector(policy, test_env)
     for agent in agents:
         policy.policies[agent].set_eps(1)
-    train_collector.collect(n_episode=80)  # batch size * training_num TODO
+    train_collector.collect(n_episode=50)  # batch size * training_num TODO
 
     # ======== Step 4: Callback functions setup =========
+    # logger:
+    logger = WandbLogger(project="confrez-tianshou", name=f"rainbow{timestamp}", save_interval=50)
+    script_path = os.path.dirname(os.path.abspath(__file__))
+    log_path = os.path.join(script_path, f"log/dqn/run{timestamp}")
+    writer = SummaryWriter(log_path)
+    # logger = TensorboardLogger(writer)
+    logger.load(writer)
+
 
     def save_best_fn(policy):
-        model_save_path = os.path.join("log", "dqn", "policy.pth")
         os.makedirs(os.path.join("log", "dqn"), exist_ok=True)
-        for agent in agents:
+        for i, agent in enumerate(agents):
+            model_save_path = os.path.join("log", "dqn", f"policy{i}.pth")
             torch.save(policy.policies[agent].state_dict(), model_save_path)
             logger.wandb_run.save(model_save_path)
+        render(agents, policy)
+        logger.wandb_run.log({'video': wandb.Video('out.gif', fps=4, format='gif')})
 
     def stop_fn(mean_rewards):
         # currently set to never stop
-        return mean_rewards >= 9000
+        return mean_rewards >= 9800
 
     def train_fn(epoch, env_step):
         # print(env_step, policy.policies[agents[0]]._iter)
@@ -185,17 +160,13 @@ if __name__ == "__main__":
     def test_fn(epoch, env_step):
         for agent in agents:
             policy.policies[agent].set_eps(0.0)
+        if epoch % 50 == 0:
+            render(agents, policy)
+            logger.wandb_run.log({'video': wandb.Video('out.gif', fps=4, format='gif')})
 
     def reward_metric(rews):
         return np.average(rews, axis=1)
 
-    # logger:
-    logger = WandbLogger(project="confrez-tianshou", name=f"rainbow{timestamp}", save_interval=50)
-    script_path = os.path.dirname(os.path.abspath(__file__))
-    log_path = os.path.join(script_path, f"log/dqn/run{timestamp}")
-    writer = SummaryWriter(log_path)
-    # logger = TensorboardLogger(writer)
-    logger.load(writer)
 
     # ======== Step 5: Run the trainer =========
     result = offpolicy_trainer(
@@ -203,15 +174,15 @@ if __name__ == "__main__":
         train_collector=train_collector,
         test_collector=test_collector,
         max_epoch=10000,
-        step_per_epoch=200,
-        step_per_collect=50,
+        step_per_epoch=500,
+        step_per_collect=10,
         episode_per_test=1,
         batch_size=32 * NUM_AGENT,
         train_fn=train_fn,
         test_fn=test_fn,
         stop_fn=stop_fn,
         save_best_fn=save_best_fn,
-        update_per_step=0.2,
+        update_per_step=0.1,
         test_in_train=False,
         reward_metric=reward_metric,
         logger=logger,
