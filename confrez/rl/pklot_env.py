@@ -58,8 +58,9 @@ class parallel_env(ParallelEnv, EzPickle):
         # "has_manual_policy": True,
     }
 
-    def __init__(self, n_vehicles=4, max_cycles=500, seed=None, random_reset=False):
+    def __init__(self, n_vehicles=4, max_cycles=500, seed=None, random_reset=False, render_mode="human"):
         EzPickle.__init__(self, n_vehicles, max_cycles)
+        self.render_mode = render_mode
         self.n_vehicles = n_vehicles
 
         self.dt = 1.0 / self.metadata["render_fps"]
@@ -544,19 +545,19 @@ class parallel_env(ParallelEnv, EzPickle):
 
         self.renderOn = True
 
-    def render(self, mode="human"):
+    def render(self):
         """
         Renders the environment
         """
-        if mode == "human" and not self.renderOn:
+        if self.render_mode == "human" and not self.renderOn:
             # sets self.renderOn to true and initializes display
             self.enable_render()
 
         self.draw()
 
-        if mode == "human":
+        if self.render_mode == "human":
             pygame.display.flip()
-        elif mode == "rgb_array":
+        elif self.render_mode == "rgb_array":
             screenshot = np.array(pygame.surfarray.pixels3d(self.screen))
 
             return np.transpose(screenshot, axes=(1, 0, 2))
