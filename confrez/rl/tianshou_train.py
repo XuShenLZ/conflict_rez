@@ -90,7 +90,7 @@ def get_agents() -> Tuple[BasePolicy, List[torch.optim.Optimizer], list]:
                 discount_factor=0.9,
                 estimation_step=4,
                 target_update_freq=int(
-                    5000
+                    1000
                 ),
             ).to("cuda" if torch.cuda.is_available() else "cpu")
         )
@@ -119,8 +119,8 @@ if __name__ == "__main__":
     train_collector = Collector(
         policy,
         train_env,
-        # PrioritizedVectorReplayBuffer(100000, len(train_env), alpha=0.5, beta=0.4),
-        VectorReplayBuffer(100000, len(train_env)),
+        PrioritizedVectorReplayBuffer(100000, len(train_env), alpha=0.5, beta=0.4),
+        # VectorReplayBuffer(100000, len(train_env)),
         exploration_noise=True,
     )
     test_collector = Collector(policy, test_env)
@@ -149,13 +149,13 @@ if __name__ == "__main__":
 
     def stop_fn(mean_rewards):
         # currently set to never stop
-        return mean_rewards >= 9800
+        return mean_rewards >= 9950
 
     def train_fn(epoch, env_step):
         # print(env_step, policy.policies[agents[0]]._iter)
         for agent in agents:
             policy.policies[agent].set_eps(max(0.99**epoch, 0.1))
-            # train_collector.buffer.set_beta(min(0.4 * 1.02**epoch, 1))
+            train_collector.buffer.set_beta(min(0.4 * 1.02**epoch, 1))
 
     def test_fn(epoch, env_step):
         for agent in agents:
