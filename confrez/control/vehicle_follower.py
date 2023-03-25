@@ -16,7 +16,7 @@ from confrez.control.compute_sets import (
     compute_static_vehicles,
 )
 
-from confrez.control.dynamic_model import kinematic_bicycle_rk, simulator
+from confrez.dynamic_model import kinematic_bicycle_rk, kinematic_bicycle_simulator
 from confrez.control.realtime_visualizer import RealtimeVisualizer
 from confrez.obstacle_types import GeofenceRegion
 from confrez.vehicle_types import VehicleBody, VehicleConfig
@@ -189,7 +189,7 @@ class VehicleFollower(Vehicle):
         J = 0
 
         f_dt = kinematic_bicycle_rk(dt=dt, vehicle_body=self.vehicle_body)
-        self.simulator = simulator(dt=dt, vehicle_body=self.vehicle_body)
+        self.simulator = kinematic_bicycle_simulator(dt=dt, vehicle_body=self.vehicle_body)
 
         self.opti.subject_to(self.x[0] == self.current_x)
         self.opti.subject_to(self.y[0] == self.current_y)

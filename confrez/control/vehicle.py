@@ -13,7 +13,7 @@ from confrez.control.compute_sets import (
     compute_sets,
     interp_along_sets,
 )
-from confrez.control.dynamic_model import kinematic_bicycle_ct
+from confrez.dynamic_model import kinematic_bicycle_ct
 from confrez.control.utils import plot_car
 from confrez.obstacle_types import GeofenceRegion
 
@@ -917,7 +917,12 @@ def main():
     zu0 = vehicle.dual_ws(zu0)
     zu0 = vehicle.interp_ws_for_collocation(zu0, K=5, N_per_set=5)
     vehicle.setup_single_final_problem(
-        zu0=zu0, init_offset=init_offset, final_heading=final_headings[agent], K=5, N_per_set=5, shrink_tube=0.5
+        zu0=zu0,
+        init_offset=init_offset,
+        final_heading=final_headings[agent],
+        K=5,
+        N_per_set=5,
+        shrink_tube=0.5,
     )
 
     sol = vehicle.solve_single_final_problem()
