@@ -561,8 +561,8 @@ class MultiVehiclePlanner(object):
 
             for j, agent in enumerate(sorted(self.agents)):
                 ax.plot(
-                    self.final_results[agent].x,
-                    self.final_results[agent].y,
+                    self.final_results[agent].x[:i+1],
+                    self.final_results[agent].y[:i+1],
                     color=self.colors[agent]["front"],
                     label=agent,
                     zorder=j,
@@ -606,12 +606,12 @@ def main():
     """
     main
     """
-    rl_file_name = "3v_rl_traj"
+    rl_file_name = "4v_rl_traj"
     ws_config = {
         "vehicle_0": False,
         "vehicle_1": True,
         "vehicle_2": True,
-        # "vehicle_3": True,
+        "vehicle_3": True,
     }
     colors = {
         "vehicle_0": {
@@ -638,8 +638,8 @@ def main():
         "vehicle_2": VehicleState(),
         "vehicle_3": VehicleState(),
     }
-    init_offsets["vehicle_0"].x.x = 0.1
-    init_offsets["vehicle_0"].e.psi = np.pi / 20
+    # init_offsets["vehicle_0"].x.x = 0.1
+    # init_offsets["vehicle_0"].e.psi = np.pi / 20
 
     final_headings = {
         "vehicle_0": 0,
