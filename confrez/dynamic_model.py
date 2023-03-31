@@ -58,9 +58,9 @@ def kinematic_bicycle_rk(dt: float, vehicle_body: VehicleBody, M=4):
     return ca.Function("f_dt", [state, input], [zkp])
 
 
-def simulator(dt: float, vehicle_body: VehicleBody):
+def kinematic_bicycle_simulator(dt: float, vehicle_body: VehicleBody):
     """
-    simulator with ODE integrator
+    kinematic_bicycle simulator with ODE integrator
     """
     x = ca.SX.sym("x")
     y = ca.SX.sym("y")
@@ -79,6 +79,37 @@ def simulator(dt: float, vehicle_body: VehicleBody):
     yawdot = v / vehicle_body.wb * ca.tan(delta)
     deltadot = w
     output = ca.vertcat(xdot, ydot, yawdot, vdot, deltadot)
+
+    prob = {"x": state, "p": input, "ode": output}
+    setup = {"t0": 0, "tf": dt}
+
+    ode_solver = ca.integrator("int", "idas", prob, setup)
+
+    state_mx = ca.MX.sym("state", state.size())
+    input_mx = ca.MX.sym("input", input.size())
+
+    zf = ode_solver.call([state_mx, input_mx, 0, 0, 0, 0])[0]
+
+    return ca.Function("zf", [state_mx, input_mx], [zf])
+
+
+def unicycle_simulator(dt: float) -> ca.Function:
+    """
+    unicycle model simulator
+    """
+    x = ca.SX.sym("x")
+    y = ca.SX.sym("y")
+    yaw = ca.SX.sym("yaw")
+    state = ca.vertcat(x, y, yaw)
+
+    v = ca.SX.sym("v")  # Velocity / speed
+    w = ca.SX.sym("w")  # Rotation rate
+    input = ca.vertcat(v, w)
+
+    xdot = v * ca.cos(yaw)
+    ydot = v * ca.sin(yaw)
+    yawdot = w
+    output = ca.vertcat(xdot, ydot, yawdot)
 
     prob = {"x": state, "p": input, "ode": output}
     setup = {"t0": 0, "tf": dt}

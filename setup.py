@@ -23,6 +23,7 @@ setuptools.setup(
         "lark",
         "gymnasium==0.27.1",
         "tianshou==0.4.11",
+        "shapely==2.0.1",
     ],
     # install pytorch according to CUDA version / CPU
 )

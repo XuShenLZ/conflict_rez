@@ -30,7 +30,7 @@ timestamp = now.strftime("%m-%d-%Y_%H-%M-%S")
 
 MODEL_NAME = "Tianshou-Multiagent"
 NUM_AGENT = 4
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def step_schedule(
@@ -61,7 +61,11 @@ def step_schedule(
 def get_env(render_mode="human"):
     """This function is needed to provide callables for DummyVectorEnv."""
     env = pklot_env.raw_env(
-        n_vehicles=NUM_AGENT, random_reset=False, seed=1, max_cycles=500, render_mode=render_mode
+        n_vehicles=NUM_AGENT,
+        random_reset=False,
+        seed=1,
+        max_cycles=500,
+        render_mode=render_mode,
     )  # seed=1
     env = ss.black_death_v3(env)
     env = ss.resize_v1(env, 140, 140)
@@ -89,9 +93,7 @@ def get_agents() -> Tuple[BasePolicy, List[torch.optim.Optimizer], list]:
                 optim=optim,
                 discount_factor=0.9,
                 estimation_step=4,
-                target_update_freq=int(
-                    1000
-                ),
+                target_update_freq=int(1000),
             ).to("cuda" if torch.cuda.is_available() else "cpu")
         )
 
@@ -130,13 +132,14 @@ if __name__ == "__main__":
 
     # ======== Step 4: Callback functions setup =========
     # logger:
-    logger = WandbLogger(project="confrez-tianshou", name=f"rainbow{timestamp}", save_interval=50)
+    logger = WandbLogger(
+        project="confrez-tianshou", name=f"rainbow{timestamp}", save_interval=50
+    )
     script_path = os.path.dirname(os.path.abspath(__file__))
     log_path = os.path.join(script_path, f"log/dqn/run{timestamp}")
     writer = SummaryWriter(log_path)
     # logger = TensorboardLogger(writer)
     logger.load(writer)
-
 
     def save_best_fn(policy):
         os.makedirs(os.path.join("log", "dqn"), exist_ok=True)
@@ -145,7 +148,7 @@ if __name__ == "__main__":
             torch.save(policy.policies[agent].state_dict(), model_save_path)
             logger.wandb_run.save(model_save_path)
         render(agents, policy)
-        logger.wandb_run.log({'video': wandb.Video('out.gif', fps=4, format='gif')})
+        logger.wandb_run.log({"video": wandb.Video("out.gif", fps=4, format="gif")})
 
     def stop_fn(mean_rewards):
         # currently set to never stop
@@ -162,11 +165,10 @@ if __name__ == "__main__":
             policy.policies[agent].set_eps(0.0)
         if epoch % 50 == 0:
             render(agents, policy)
-            logger.wandb_run.log({'video': wandb.Video('out.gif', fps=4, format='gif')})
+            logger.wandb_run.log({"video": wandb.Video("out.gif", fps=4, format="gif")})
 
     def reward_metric(rews):
         return np.average(rews, axis=1)
-
 
     # ======== Step 5: Run the trainer =========
     result = offpolicy_trainer(
