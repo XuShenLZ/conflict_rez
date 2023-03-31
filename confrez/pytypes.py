@@ -172,6 +172,7 @@ class VehicleActuation(PythonMsg):
 
     u_a: float = field(default=0)
     u_steer: float = field(default=0)
+    u_steer_dot: float = field(default=0)
 
     def __str__(self):
         return "t:{self.t}, u_a:{self.u_a}, u_steer:{self.u_steer}".format(self=self)
@@ -402,7 +403,9 @@ class VehicleState(PythonMsg):
 
     def get_R(self, reverse=False):
         # Warning - Not suitable for general 3D case
-        psi = self.psi
+        psi = self.e.psi
+        if reverse:
+            psi *= -1
         return np.array(
             [[np.cos(psi), -np.sin(psi), 0], [np.sin(psi), np.cos(psi), 0], [0, 0, 0]]
         )

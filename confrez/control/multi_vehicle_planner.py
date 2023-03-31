@@ -33,6 +33,7 @@ class MultiVehiclePlanner(object):
         ws_config: Dict[str, bool],
         colors: Dict[str, Tuple[float, float, float]],
         init_offsets: Dict[str, VehicleState],
+        final_headings: Dict[str, float],
         vehicle_body: VehicleBody = VehicleBody(),
         vehicle_config: VehicleConfig = VehicleConfig(),
         region: GeofenceRegion = GeofenceRegion(),
@@ -41,11 +42,12 @@ class MultiVehiclePlanner(object):
         self.ws_config = ws_config
         self.colors = colors
         self.init_offsets = init_offsets
+        self.final_headings = final_headings
         self.vehicle_body = vehicle_body
         self.vehicle_config = vehicle_config
         self.region = region
 
-        self.agents = set(self.ws_config.keys())
+        self.agents = sorted(self.ws_config.keys())
         self.agent_pairs = list(combinations(self.agents, 2))
 
         self.rl_tubes = compute_sets(self.rl_file_name)
@@ -85,6 +87,7 @@ class MultiVehiclePlanner(object):
                 N=N,
                 dt=dt,
                 init_offset=self.init_offsets[agent],
+                final_heading=self.final_headings[agent],
                 shrink_tube=shrink_tube,
                 spline_ws=self.ws_config[agent],
             )
@@ -95,6 +98,7 @@ class MultiVehiclePlanner(object):
             vehicle.setup_single_final_problem(
                 zu0=zu0,
                 init_offset=self.init_offsets[agent],
+                final_heading=self.final_headings[agent],
                 K=K,
                 N_per_set=N_per_set,
                 shrink_tube=shrink_tube,
@@ -228,20 +232,12 @@ class MultiVehiclePlanner(object):
             this_vehicle = self.vehicles[agent]
             this_x = self.single_results[agent].x.reshape((this_vehicle.N, K + 1))
             this_y = self.single_results[agent].y.reshape((this_vehicle.N, K + 1))
-            this_psi = (
-                self.single_results[agent].psi.reshape((this_vehicle.N, K + 1))
-            )
+            this_psi = self.single_results[agent].psi.reshape((this_vehicle.N, K + 1))
 
             other_vehicle = self.vehicles[other]
-            other_x = (
-                self.single_results[other].x.reshape((other_vehicle.N, K + 1))
-            )
-            other_y = (
-                self.single_results[other].y.reshape((other_vehicle.N, K + 1))
-            )
-            other_psi = (
-                self.single_results[other].psi.reshape((other_vehicle.N, K + 1))
-            )
+            other_x = self.single_results[other].x.reshape((other_vehicle.N, K + 1))
+            other_y = self.single_results[other].y.reshape((other_vehicle.N, K + 1))
+            other_psi = self.single_results[other].psi.reshape((other_vehicle.N, K + 1))
 
             N_min = min(this_vehicle.N, other_vehicle.N)
 
@@ -378,6 +374,7 @@ class MultiVehiclePlanner(object):
             vehicle.setup_single_final_problem(
                 zu0=self.single_results[agent],
                 init_offset=self.init_offsets[agent],
+                final_heading=self.final_headings[agent],
                 opti=opti,
                 dt=dt,
                 K=K,
@@ -500,31 +497,33 @@ class MultiVehiclePlanner(object):
         static_vehicles = compute_static_vehicles()
         parking_lines = compute_parking_lines()
 
-        for agent in self.agents:
+        for agent in sorted(self.agents):
             ax = plt.subplot(2, 1, 1)
-            plt.plot(
-                self.single_results[agent].t,
-                self.single_results[agent].x,
-                label=agent + "_single",
-            )
             plt.plot(
                 self.final_results[agent].t,
                 self.final_results[agent].x,
                 label=agent + "_final",
+            )
+            plt.plot(
+                self.single_results[agent].t,
+                self.single_results[agent].x,
+                "--",
+                label=agent + "_single",
             )
             ax.set_ylabel("X (m)")
             ax.legend()
 
             ax = plt.subplot(2, 1, 2)
             plt.plot(
-                self.single_results[agent].t,
-                self.single_results[agent].y,
-                label=agent + "_single",
-            )
-            plt.plot(
                 self.final_results[agent].t,
                 self.final_results[agent].y,
                 label=agent + "_final",
+            )
+            plt.plot(
+                self.single_results[agent].t,
+                self.single_results[agent].y,
+                "--",
+                label=agent + "_single",
             )
             ax.set_ylabel("Y (m)")
             ax.set_xlabel("Time (s)")
@@ -607,12 +606,12 @@ def main():
     """
     main
     """
-    rl_file_name = "4v_rl_traj"
+    rl_file_name = "3v_rl_traj"
     ws_config = {
         "vehicle_0": False,
         "vehicle_1": True,
         "vehicle_2": True,
-        "vehicle_3": True,
+        # "vehicle_3": True,
     }
     colors = {
         "vehicle_0": {
@@ -639,12 +638,22 @@ def main():
         "vehicle_2": VehicleState(),
         "vehicle_3": VehicleState(),
     }
+    init_offsets["vehicle_0"].x.x = 0.1
+    init_offsets["vehicle_0"].e.psi = np.pi / 20
+
+    final_headings = {
+        "vehicle_0": 0,
+        "vehicle_1": 3 * np.pi / 2,
+        "vehicle_2": np.pi,
+        "vehicle_3": np.pi / 2,
+    }
 
     planner = MultiVehiclePlanner(
         rl_file_name=rl_file_name,
         ws_config=ws_config,
         colors=colors,
         init_offsets=init_offsets,
+        final_headings=final_headings,
     )
 
     planner.solve_single_problems(

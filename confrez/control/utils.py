@@ -30,9 +30,15 @@ def pi_2_pi(angle):
 
 
 def plot_car(
-    x: float, y: float, yaw: float, vehicle_body: VehicleBody, text=None, zorder=10
+    x: float,
+    y: float,
+    yaw: float,
+    vehicle_body: VehicleBody,
+    text=None,
+    zorder=10,
+    car_color="k",
+    fill_color=None,
 ):
-    car_color = "-k"
     rot = rot_mat_2d(-yaw)
     car_outline_x, car_outline_y = [], []
     for rx, ry in zip(vehicle_body.xy[:, 0], vehicle_body.xy[:, 1]):
@@ -40,11 +46,17 @@ def plot_car(
         car_outline_x.append(converted_xy[0] + x)
         car_outline_y.append(converted_xy[1] + y)
 
-    plt.plot(car_outline_x, car_outline_y, car_color, zorder=zorder)
+    if fill_color is not None:
+        plt.fill(car_outline_x, car_outline_y, color=fill_color, zorder=zorder)
+
+    plt.plot(car_outline_x, car_outline_y, color=car_color, zorder=zorder)
+
     plt.plot(
         [x, x + cos(yaw) * vehicle_body.wb],
         [y, y + sin(yaw) * vehicle_body.wb],
-        "kD",
+        color=car_color,
+        linestyle="None",
+        marker="D",
         markersize=2.5,
         zorder=zorder,
     )
@@ -54,7 +66,7 @@ def plot_car(
         y,
         0.2 * vehicle_body.wb * np.cos(yaw),
         0.2 * vehicle_body.wb * np.sin(yaw),
-        color="k",
+        color=car_color,
         width=0.04,
         head_width=0.5,
         zorder=zorder,

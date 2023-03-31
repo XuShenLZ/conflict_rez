@@ -21,7 +21,8 @@ Project Webpage: https://bit.ly/rl-cr
 2. Run `python confrez/rl/experiment.py` to see the steps taken by the DQN policy to resolve the conflict in the discrete environment.
 3. Run `python confrez/rl/record_states_history.py` to generate a `.pkl` file that records the steps taken by the RL agents, which will serve as the configuration strategies for the trajectory planning problems.
 4. Run `python confrez/control/vehicle.py` to plan a single-vehicle collision free trajectory following the strategy-guided configurations.
-5. Run `python confrez/control/multi_vehicle_planner.py` to solve for the final multi-vehicle continuous trajectories to resolve conflict.
+5. (Centralized method) Run `python confrez/control/multi_vehicle_planner.py` to solve the multi-vehicle trajectory planning problem to resolve conflict. 
+6. (Distributed method) Run `python confrez/control/vehicle_follower.py` so that each vehicle generates its own strategy-guided reference trajectory, and then follows it with distributed MPC to avoid collisions.
 
 ## Training
 1. Run `python confrez/rl/train.py` to train a new policy.

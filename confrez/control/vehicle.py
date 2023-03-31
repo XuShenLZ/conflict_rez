@@ -101,6 +101,7 @@ class Vehicle(object):
         N: int = 30,
         dt: float = 0.1,
         init_offset: VehicleState = VehicleState(),
+        final_heading: float = None,
         bounded_input: bool = False,
         shrink_tube: float = 0.8,
         spline_ws: bool = False,
@@ -189,6 +190,9 @@ class Vehicle(object):
             A = self.rl_tube[i]["front"].A
             b = self.rl_tube[i]["front"].b
             opti.subject_to(A @ front <= b - shrink_tube)
+
+        if final_heading is not None:
+            opti.subject_to(psi[-1] == final_heading)
 
         opti.minimize(J)
 
@@ -357,6 +361,7 @@ class Vehicle(object):
         self,
         zu0: VehiclePrediction,
         init_offset: VehicleState = VehicleState(),
+        final_heading: float = None,
         opti: ca.Opti = None,
         dt: ca.Opti.variable = None,
         K: int = 5,
@@ -610,6 +615,9 @@ class Vehicle(object):
         tA = self.rl_tube[-1]["front"].A
         tb = self.rl_tube[-1]["front"].b
         self.opti.subject_to(tA @ front <= tb - shrink_tube)
+
+        if final_heading is not None:
+            self.opti.subject_to(self.zF[2] == final_heading)
 
         self.opti.subject_to(self.zF[3] == 0)
         self.opti.subject_to(self.zF[4] == 0)
@@ -890,10 +898,18 @@ def main():
         "vehicle_3": True,
     }
 
+    final_headings = {
+        "vehicle_0": 0,
+        "vehicle_1": 3 * np.pi / 2,
+        "vehicle_2": np.pi,
+        "vehicle_3": np.pi / 2,
+    }
+
     zu0 = vehicle.state_ws(
         N=30,
         dt=0.1,
         init_offset=init_offset,
+        final_heading=final_headings[agent],
         shrink_tube=0.5,
         spline_ws=spline_ws_config[agent],
     )
@@ -901,7 +917,7 @@ def main():
     zu0 = vehicle.dual_ws(zu0)
     zu0 = vehicle.interp_ws_for_collocation(zu0, K=5, N_per_set=5)
     vehicle.setup_single_final_problem(
-        zu0=zu0, init_offset=init_offset, K=5, N_per_set=5, shrink_tube=0.5
+        zu0=zu0, init_offset=init_offset, final_heading=final_headings[agent], K=5, N_per_set=5, shrink_tube=0.5
     )
 
     sol = vehicle.solve_single_final_problem()

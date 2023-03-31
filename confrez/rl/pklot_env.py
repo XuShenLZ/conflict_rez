@@ -6,11 +6,11 @@ import random
 from gymnasium.spaces import Box, Discrete
 import numpy as np
 import pygame
-from gym.utils import EzPickle, seeding
+from gymnasium.utils import EzPickle, seeding
 
 from pettingzoo import ParallelEnv
-from pettingzoo.utils import wrappers 
-from pettingzoo.utils import parallel_to_aec as parallel_to_aec
+from pettingzoo.utils import wrappers, parallel_to_aec
+
 FPS = 5
 
 
@@ -615,9 +615,7 @@ class parallel_env(ParallelEnv, EzPickle):
         terminations = {
             agent: False for agent in self.agents
         }  # All agents that are in self.agents should be active, thus not done
-        truncations = {
-            agent: False for agent in self.agents
-        }
+        truncations = {agent: False for agent in self.agents}
         infos = {agent: {} for agent in self.agents}
 
         if not self.cycle_done:
@@ -681,4 +679,5 @@ class parallel_env(ParallelEnv, EzPickle):
 
         # Remove the done agents from the active agent list. This will only affect next iteration
         self.agents = [agent for agent in self.agents if not terminations[agent]]
+
         return observations, rewards, terminations, truncations, infos
