@@ -4,7 +4,7 @@ from itertools import product
 from typing import Dict, List, Set, Tuple
 import random
 import casadi as ca
-from shapely import Polygon
+from shapely.geometry import Polygon
 
 
 from gymnasium.spaces import Box, Discrete
