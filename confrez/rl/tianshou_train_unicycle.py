@@ -151,7 +151,7 @@ if __name__ == "__main__":
             model_save_path = os.path.join("log", "dqn", f"policy{i}.pth")
             torch.save(policy.policies[agent].state_dict(), model_save_path)
             logger.wandb_run.save(model_save_path)
-        render_unicycle(agents, policy)
+        render_unicycle(agents, policy, n_vehicles=NUM_AGENT)
         logger.wandb_run.log({"video": wandb.Video("out.gif", fps=4, format="gif")})
 
     def stop_fn(mean_rewards):
@@ -168,7 +168,7 @@ if __name__ == "__main__":
         for agent in agents:
             policy.policies[agent].set_eps(0.0)
         if epoch % 50 == 0:
-            render_unicycle(agents, policy)
+            render_unicycle(agents, policy, n_vehicles=NUM_AGENT)
             logger.wandb_run.log({"video": wandb.Video("out.gif", fps=4, format="gif")})
 
     def reward_metric(rews):

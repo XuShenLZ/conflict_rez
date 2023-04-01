@@ -651,12 +651,12 @@ class parallel_env(ParallelEnv, EzPickle):
         surf = self.canvas.copy()
 
         # Draw agents
-        for agent in self.possible_agents:
+        for agent in self.agents:
             self.draw_goal(
                 agent, color=self._colors[self.agent_name_mapping[agent]], surf=surf
             )
 
-        for agent in self.possible_agents:
+        for agent in self.agents:
             self.draw_car(
                 agent, color=self._colors[self.agent_name_mapping[agent]], surf=surf
             )
