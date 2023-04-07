@@ -9,6 +9,7 @@ import numpy as np
 from scipy import interpolate
 from model import CNNDQN, DuelingDQN
 import gymnasium as gym
+from collections import deque
 
 from tianshou.data import Collector, VectorReplayBuffer, PrioritizedVectorReplayBuffer
 from tianshou.env import DummyVectorEnv, PettingZooEnv, SubprocVectorEnv
@@ -32,7 +33,11 @@ MODEL_NAME = "Tianshou-Multiagent"
 NUM_AGENT = 1
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-temp = pklot_env_unicycle.parallel_env()
+
+params = pklot_env_unicycle.EnvParams(
+    reward_stop=0
+)
+temp = pklot_env_unicycle.parallel_env(params=params)
 num_actions = len(temp.actions)
 del temp
 
@@ -68,8 +73,9 @@ def get_env(render_mode="human"):
         n_vehicles=NUM_AGENT,
         random_reset=False,
         seed=1,
-        max_cycles=500,
+        max_cycles=200,
         render_mode=render_mode,
+        params=params
     )  # seed=1
     env = ss.black_death_v3(env)
     env = ss.resize_v1(env, 140, 140)
@@ -97,7 +103,7 @@ def get_agents() -> Tuple[BasePolicy, List[torch.optim.Optimizer], list]:
                 optim=optim,
                 discount_factor=0.9,
                 estimation_step=NUM_AGENT,
-                target_update_freq=int(1000),
+                target_update_freq=int(5000),
             ).to("cuda" if torch.cuda.is_available() else "cpu")
         )
 
@@ -132,7 +138,7 @@ if __name__ == "__main__":
     test_collector = Collector(policy, test_env)
     for agent in agents:
         policy.policies[agent].set_eps(1)
-    train_collector.collect(n_episode=50)  # batch size * training_num TODO
+    train_collector.collect(n_episode=100)  # batch size * training_num TODO
 
     # ======== Step 4: Callback functions setup =========
     # logger:
@@ -154,22 +160,29 @@ if __name__ == "__main__":
         render_unicycle(agents, policy, n_vehicles=NUM_AGENT)
         logger.wandb_run.log({"video": wandb.Video("out.gif", fps=4, format="gif")})
 
-    def stop_fn(mean_rewards):
-        # currently set to never stop
-        return mean_rewards >= 9950
+
+    def stop_over_n(n=10):
+        mean_n = deque(maxlen=n)
+
+        def stop_fn(mean_rewards):
+            # currently set to never stop
+            mean_n.append(mean_rewards)
+            return np.mean(mean_n) >= 9950
+
+        return stop_fn
 
     def train_fn(epoch, env_step):
         # print(env_step, policy.policies[agents[0]]._iter)
         for agent in agents:
-            policy.policies[agent].set_eps(max(0.99**epoch, 0.1))
+            policy.policies[agent].set_eps(max(0.995**epoch, 0.1))
             # train_collector.buffer.set_beta(min(0.4 * 1.02**epoch, 1))
 
     def test_fn(epoch, env_step):
         for agent in agents:
             policy.policies[agent].set_eps(0.0)
-        if epoch % 50 == 0:
-            render_unicycle(agents, policy, n_vehicles=NUM_AGENT)
-            logger.wandb_run.log({"video": wandb.Video("out.gif", fps=4, format="gif")})
+        # if epoch % 50 == 0:
+        #     render_unicycle(agents, policy, n_vehicles=NUM_AGENT)
+        #     logger.wandb_run.log({"video": wandb.Video("out.gif", fps=4, format="gif")})
 
     def reward_metric(rews):
         return np.average(rews, axis=1)
@@ -179,14 +192,14 @@ if __name__ == "__main__":
         policy=policy,
         train_collector=train_collector,
         test_collector=test_collector,
-        max_epoch=10000,
-        step_per_epoch=500,
+        max_epoch=20000,
+        step_per_epoch=200,
         step_per_collect=10,
         episode_per_test=1,
         batch_size=32 * NUM_AGENT,
         train_fn=train_fn,
         test_fn=test_fn,
-        stop_fn=stop_fn,
+        stop_fn=stop_over_n(10),
         save_best_fn=save_best_fn,
         update_per_step=0.1,
         test_in_train=False,

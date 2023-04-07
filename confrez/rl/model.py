@@ -14,6 +14,7 @@ import numpy as np
 import torch
 import torchvision
 from torch import nn
+import torch.nn.functional as F
 import gymnasium as gym
 from tianshou.utils.net.common import Net, MLP
 
@@ -79,6 +80,8 @@ class DuelingDQN(nn.Module):
             nn.ReLU(),
             nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=0),
             nn.ReLU(),
+            ResBlock(64, 64, kernel_size=3),
+            ResBlock(64, 64, kernel_size=3),
             nn.Flatten(),
         )
         with torch.no_grad():
@@ -205,3 +208,22 @@ class Critic(nn.Module):
             obs = torch.tensor(obs, dtype=torch.float)
         logits = self.linear(self.cnn(obs))
         return logits
+
+
+class ResBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size=3):
+        super(ResBlock, self).__init__()
+        self.conv = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=1, padding='same'),
+            nn.ReLU(),
+            nn.Conv2d(out_channels, out_channels, kernel_size=kernel_size, stride=1, padding='same'),
+            nn.ReLU(),
+            nn.Conv2d(out_channels, out_channels, kernel_size=kernel_size, stride=1, padding='same')
+        )
+
+    def forward(self, x):
+        res = x
+        out = self.conv(x)
+
+        out += res
+        return F.relu(out)
