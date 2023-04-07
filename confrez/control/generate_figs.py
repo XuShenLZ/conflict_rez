@@ -6,6 +6,9 @@ import numpy as np
 import dill
 import pickle
 
+plt.rcParams["pdf.fonttype"] = 42
+plt.rcParams["ps.fonttype"] = 42
+
 from pytope import Polytope
 
 from confrez.control.compute_sets import (
@@ -68,13 +71,23 @@ def plot_grid_scenario(rl_file_name: str = "4v_rl_traj", L: float = 2.5):
     """
     Plot grid world, obstcales, and example agents
     """
-    plt.figure()
+    # plt.rc('font', family='Times New Roman')
+    fig = plt.figure()
     for x, y in product(range(14), repeat=2):
         plt.axhline(y=y * L, xmin=0, xmax=14 * L, color="k", linewidth=1)
         plt.axvline(x=x * L, ymin=0, ymax=14 * L, color="k", linewidth=1)
     ax = plt.gca()
     # for p in obstacles:
     #     p.plot(ax, facecolor=(0 / 255, 128 / 255, 255 / 255))
+
+    boundaries = [
+        Polytope([[0, 11 * L], [0, 14 * L], [14 * L, 14 * L], [14 * L, 11 * L]]),
+        Polytope([[0, 0], [0, 3 * L], [14 * L, 3 * L], [14 * L, 0]]),
+        Polytope([[0, 3 * L], [0, 11 * L], [L, 11 * L], [L, 3 * L]]),
+        Polytope(
+            [[13 * L, 3 * L], [13 * L, 11 * L], [14 * L, 11 * L], [14 * L, 3 * L]]
+        ),
+    ]
 
     inflated_obstacles = [
         Polytope([[1 * L, 8 * L], [1 * L, 11 * L], [6 * L, 11 * L], [6 * L, 8 * L]]),
@@ -86,6 +99,9 @@ def plot_grid_scenario(rl_file_name: str = "4v_rl_traj", L: float = 2.5):
         Polytope([[7 * L, 3 * L], [7 * L, 6 * L], [8 * L, 6 * L], [8 * L, 3 * L]]),
         Polytope([[9 * L, 3 * L], [9 * L, 6 * L], [13 * L, 6 * L], [13 * L, 3 * L]]),
     ]
+    for p in boundaries:
+        p.plot(ax, fill=False, edgecolor=(0 / 255, 128 / 255, 255 / 255), hatch="///")
+
     for p in inflated_obstacles:
         p.plot(ax, facecolor=(0 / 255, 128 / 255, 255 / 255))
 
@@ -106,12 +122,15 @@ def plot_grid_scenario(rl_file_name: str = "4v_rl_traj", L: float = 2.5):
 
     plt.tight_layout()
 
+    fig.savefig("grid_world_4v_with_hatch.pdf", bbox_inches="tight")
+
 
 def plot_grid_dynamics(L: float = 2.5):
     """
     Plot agent dynamis in grid world
     """
-    plt.figure(figsize=(3.69, 5.44))
+    # plt.rc("font", family="Times New Roman")
+    fig = plt.figure(figsize=(3.69, 5.44))
     ax = plt.subplot(3, 3, 1)
     for x, y in product(range(4), range(5)):
         plt.axhline(y=y * L, xmin=0, xmax=3 * L, color="k", linewidth=1)
@@ -239,6 +258,7 @@ def plot_grid_dynamics(L: float = 2.5):
     ax.axis("off")
 
     plt.tight_layout()
+    fig.savefig("grid_dynamics.pdf", bbox_inches="tight")
 
 
 def plot_single_vehicle_spline(rl_file_name: str = "4v_rl_traj"):
@@ -815,7 +835,7 @@ def plot_multi_vehicle_final_pose_k(
 
     rl_sets = compute_sets(rl_file_name)
 
-    plt.figure()
+    fig = plt.figure()
     ax = plt.gca()
 
     for obstacle in obstacles:
@@ -828,8 +848,8 @@ def plot_multi_vehicle_final_pose_k(
         plt.plot(line[:, 0], line[:, 1], "k--", linewidth=1)
 
     for i, agent in enumerate(rl_sets):
-        x = zu[agent].x
-        y = zu[agent].y
+        x = zu[agent].x[: k + 1]
+        y = zu[agent].y[: k + 1]
         plt.plot(
             x,
             y,
@@ -858,6 +878,8 @@ def plot_multi_vehicle_final_pose_k(
     )
 
     plt.tight_layout()
+
+    fig.savefig(f"multi_vehicle_pose_at_{k * dt}s.pdf", bbox_inches="tight")
 
 
 def plot_multi_vehicle_states(sol_file_name: str = "4v_rl_traj_opt"):
@@ -905,7 +927,7 @@ def plot_multi_vehicle_states(sol_file_name: str = "4v_rl_traj_opt"):
         )
         ax.tick_params(axis="y", labelsize="x-large")
         ax.get_xaxis().set_visible(False)
-        ax.legend(fontsize="x-large")
+        # ax.legend(fontsize="x-large")
 
         ax = plt.subplot(2, 2, 3)
         t = zu[agent].t
@@ -929,7 +951,7 @@ def plot_multi_vehicle_states(sol_file_name: str = "4v_rl_traj_opt"):
         )
         ax.tick_params(axis="x", labelsize="x-large")
         ax.tick_params(axis="y", labelsize="x-large")
-        ax.legend(fontsize="x-large")
+        # ax.legend(fontsize="x-large")
 
         ax = plt.subplot(2, 2, 4)
         t = zu[agent].t
@@ -952,7 +974,7 @@ def plot_multi_vehicle_states(sol_file_name: str = "4v_rl_traj_opt"):
         )
         ax.tick_params(axis="x", labelsize="x-large")
         ax.tick_params(axis="y", labelsize="x-large")
-        ax.legend(fontsize="x-large")
+        # ax.legend(fontsize="x-large")
     # ax.set_xlim(xmin=0, xmax=13 * 2.5)
     # ax.set_ylim(ymin=3 * 2.5, ymax=11 * 2.5)
 
@@ -1060,7 +1082,8 @@ def main():
     main function
     """
     rl_file_name = "4v_rl_traj"
-    # plot_grid_scenario(rl_file_name=rl_file_name)
+    plot_grid_scenario(rl_file_name=rl_file_name)
+    plot_grid_dynamics()
     # plot_single_vehicle_spline(rl_file_name=rl_file_name)
     sv_ws_file_name = "4v_rl_traj_vehicle_0_zu0"
     # plot_single_vehicle_ws(rl_file_name=rl_file_name, sol_file_name=sv_ws_file_name)
@@ -1073,10 +1096,18 @@ def main():
     mv_sol_file_name = "4v_rl_traj_opt"
     # plot_multi_vehicle_final(rl_file_name=rl_file_name, sol_file_name=mv_sol_file_name)
 
-    # plot_multi_vehicle_final_pose_k(30, rl_file_name=rl_file_name, sol_file_name=mv_sol_file_name)
-    # plot_multi_vehicle_final_pose_k(85, rl_file_name=rl_file_name, sol_file_name=mv_sol_file_name)
-    # plot_multi_vehicle_final_pose_k(150, rl_file_name=rl_file_name, sol_file_name=mv_sol_file_name)
-    # plot_multi_vehicle_final_pose_k(240, rl_file_name=rl_file_name, sol_file_name=mv_sol_file_name)
+    # plot_multi_vehicle_final_pose_k(
+    #     90, rl_file_name=rl_file_name, sol_file_name=mv_sol_file_name
+    # )
+    # plot_multi_vehicle_final_pose_k(
+    #     290, rl_file_name=rl_file_name, sol_file_name=mv_sol_file_name
+    # )
+    # plot_multi_vehicle_final_pose_k(
+    #     480, rl_file_name=rl_file_name, sol_file_name=mv_sol_file_name
+    # )
+    # plot_multi_vehicle_final_pose_k(
+    #     765, rl_file_name=rl_file_name, sol_file_name=mv_sol_file_name
+    # )
 
     # plot_multi_vehicle_states(sol_file_name=mv_sol_file_name)
 
@@ -1090,7 +1121,7 @@ def main():
     # )
 
     follower_time_file_name = "4v_rl_traj_follower_iter_time"
-    plot_multi_follower_time_box(time_file_name=follower_time_file_name)
+    # plot_multi_follower_time_box(time_file_name=follower_time_file_name)
 
     # plot_multi_follower_final_pose_k(
     #     0, rl_file_name=rl_file_name, sol_file_name=follower_sol_file_name
