@@ -16,7 +16,7 @@ from tianshou.env import DummyVectorEnv, PettingZooEnv, SubprocVectorEnv
 from torch.utils.tensorboard import SummaryWriter
 from tianshou.utils import TensorboardLogger
 
-from tianshou.policy import BasePolicy, DQNPolicy, MultiAgentPolicyManager
+from tianshou.policy import BasePolicy, DQNPolicy, MultiAgentPolicyManager, RainbowPolicy
 from tianshou.trainer import offpolicy_trainer
 from tianshou.utils.net.common import Net
 
@@ -30,7 +30,7 @@ now = datetime.now()
 timestamp = now.strftime("%m-%d-%Y_%H-%M-%S")
 
 MODEL_NAME = "Tianshou-Multiagent"
-NUM_AGENT = 1
+NUM_AGENT = 2
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
@@ -94,6 +94,8 @@ def get_agents() -> Tuple[BasePolicy, List[torch.optim.Optimizer], list]:
             device="cuda" if torch.cuda.is_available() else "cpu",
         ).to("cuda" if torch.cuda.is_available() else "cpu")
 
+        net.load_state_dict(torch.load('policy0.pth'), strict=False)
+
         optim = torch.optim.Adam(net.parameters(), lr=1e-4)  # , eps=1.5e-4
         optims.append(optim)
 
@@ -101,9 +103,9 @@ def get_agents() -> Tuple[BasePolicy, List[torch.optim.Optimizer], list]:
             DQNPolicy(
                 model=net,
                 optim=optim,
-                discount_factor=0.9,
+                discount_factor=0.99,
                 estimation_step=NUM_AGENT,
-                target_update_freq=int(5000),
+                target_update_freq=int(8000),
             ).to("cuda" if torch.cuda.is_available() else "cpu")
         )
 
@@ -148,7 +150,6 @@ if __name__ == "__main__":
     script_path = os.path.dirname(os.path.abspath(__file__))
     log_path = os.path.join(script_path, f"log/dqn/run{timestamp}")
     writer = SummaryWriter(log_path)
-    # logger = TensorboardLogger(writer)
     logger.load(writer)
 
     def save_best_fn(policy):
@@ -167,14 +168,14 @@ if __name__ == "__main__":
         def stop_fn(mean_rewards):
             # currently set to never stop
             mean_n.append(mean_rewards)
-            return np.mean(mean_n) >= 9950
+            return np.mean(mean_n) >= 9000
 
         return stop_fn
 
     def train_fn(epoch, env_step):
         # print(env_step, policy.policies[agents[0]]._iter)
         for agent in agents:
-            policy.policies[agent].set_eps(max(0.995**epoch, 0.1))
+            policy.policies[agent].set_eps(max(0.997**epoch, 0.1))
             # train_collector.buffer.set_beta(min(0.4 * 1.02**epoch, 1))
 
     def test_fn(epoch, env_step):
