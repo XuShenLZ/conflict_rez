@@ -8,7 +8,7 @@ log/
 
 # Results
 *.pdf
-*.png
+# *.png
 *.mp4
 
 # Data
