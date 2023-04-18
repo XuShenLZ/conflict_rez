@@ -39,48 +39,59 @@ def step_schedule(
 
 
 def get_env(render_mode="human", num_agents=4, seed=1, max_cycles=500):
-    """This function is needed to provide callables for DummyVectorEnv."""
-    env = pklot_env.raw_env(
-        n_vehicles=num_agents,
-        random_reset=False,
-        seed=seed,
-        max_cycles=max_cycles,
-        render_mode=render_mode,
-    )  # seed=1
-    env = ss.black_death_v3(env)
-    env = ss.resize_v1(env, 140, 140)
-    return PettingZooEnv(env)
+    def get():
+        """This function is needed to provide callables for DummyVectorEnv."""
+        env = pklot_env.raw_env(
+            n_vehicles=num_agents,
+            random_reset=False,
+            seed=seed,
+            max_cycles=max_cycles,
+            render_mode=render_mode,
+        )  # seed=1
+        env = ss.black_death_v3(env)
+        env = ss.resize_v1(env, 140, 140)
+        return PettingZooEnv(env)
+
+    return get
 
 
 def get_unicycle_env(render_mode="human", num_agents=4, seed=1, max_cycles=500):
-    """This function is needed to provide callables for DummyVectorEnv."""
-    env = pklot_env_unicycle.raw_env(
-        n_vehicles=num_agents,
-        random_reset=False,
-        seed=seed,
-        max_cycles=max_cycles,
-        render_mode=render_mode,
-    )  # seed=1
-    env = ss.black_death_v3(env)
-    env = ss.resize_v1(env, 140, 140)
-    return PettingZooEnv(env)
+    def get():
+        """This function is needed to provide callables for DummyVectorEnv."""
+        env = pklot_env_unicycle.raw_env(
+            n_vehicles=num_agents,
+            random_reset=False,
+            seed=seed,
+            max_cycles=max_cycles,
+            render_mode=render_mode,
+        )  # seed=1
+        env = ss.black_death_v3(env)
+        env = ss.resize_v1(env, 140, 140)
+        return PettingZooEnv(env)
+
+    return get
 
 
 def get_agents(
-    num_agents=4, discount_factor=0.9, estimation_step=4, action_shape=7
+    num_agents=4,
+    discount_factor=0.9,
+    estimation_step=4,
+    action_shape=7,
+    lr=1e-4,
+    target_update_freq=1000,
 ) -> Tuple[BasePolicy, List[torch.optim.Optimizer], list]:
-    env = get_env()
+    env = get_env(num_agents=num_agents)()
     agents = []
     optims = []
     for _ in range(num_agents):
         net = DuelingDQN(
             state_shape=(10, 3, 140, 140),
-            action_shape=7,
+            action_shape=action_shape,
             obs=env.observation_space.sample()[None],
             device="cuda" if torch.cuda.is_available() else "cpu",
         ).to("cuda" if torch.cuda.is_available() else "cpu")
 
-        optim = torch.optim.Adam(net.parameters(), lr=1e-4)  # , eps=1.5e-4
+        optim = torch.optim.Adam(net.parameters(), lr=lr)  # , eps=1.5e-4
         optims.append(optim)
 
         agents.append(
@@ -89,7 +100,7 @@ def get_agents(
                 optim=optim,
                 discount_factor=discount_factor,
                 estimation_step=estimation_step,
-                target_update_freq=int(1000),
+                target_update_freq=target_update_freq,
             ).to("cuda" if torch.cuda.is_available() else "cpu")
         )
 

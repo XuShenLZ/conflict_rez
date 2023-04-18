@@ -1,0 +1,42 @@
+{
+    "os": "macOS-10.16-x86_64-i386-64bit",
+    "python": "3.8.15",
+    "heartbeatAt": "2023-04-18T05:43:14.882461",
+    "startedAt": "2023-04-18T05:43:14.824667",
+    "docker": null,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "train.py",
+    "codePath": "confrez/rl/train.py",
+    "git": {
+        "remote": "https://github.com/XuShenLZ/conflict_rez.git",
+        "commit": "20241dd4414998b679c5626fb308df50c5b68986"
+    },
+    "email": "tianyue.cheng@berkeley.edu",
+    "root": "/Users/tianyuecheng/Desktop/Research/conflict_rez",
+    "host": "Charlies-Macbook-Pro.local",
+    "username": "tianyuecheng",
+    "executable": "/Users/tianyuecheng/opt/anaconda3/envs/tianshou/bin/python",
+    "cpu_count": 8,
+    "cpu_count_logical": 8,
+    "cpu_freq": {
+        "current": 2400,
+        "min": 2400,
+        "max": 2400
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 2400,
+            "min": 2400,
+            "max": 2400
+        }
+    ],
+    "disk": {
+        "total": 460.4317207336426,
+        "used": 8.452186584472656
+    },
+    "memory": {
+        "total": 16.0
+    }
+}

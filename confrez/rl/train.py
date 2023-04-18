@@ -1,16 +1,15 @@
-import datetime
 import os
 import hydra
-import yaml
 from hydra.utils import to_absolute_path
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 
 
 @hydra.main(config_name="config", config_path="./cfg", version_base=None)
-def launch_rlg_hydra(cfg: DictConfig):
+def launch(cfg: DictConfig):
     from datetime import datetime
     from os import path as os_path
     import torch
+    from torch.utils.tensorboard import SummaryWriter
     import numpy as np
     import confrez.rl.envs.pklot_env_unicycle as pklot_env_unicycle
     from tianshou.data import (
@@ -18,44 +17,52 @@ def launch_rlg_hydra(cfg: DictConfig):
         VectorReplayBuffer,
     )
     from tianshou.env import DummyVectorEnv, SubprocVectorEnv
-    from torch.utils.tensorboard import SummaryWriter
     from tianshou.trainer import offpolicy_trainer
     from tianshou.utils import WandbLogger
-    from torch.utils.tensorboard import SummaryWriter
-    from tianshou_experiment import render
+    from utils.render import render, render_unicycle
     from confrez.rl.utils.train_utils import get_env, get_agents, get_unicycle_env
 
     import wandb
 
-    time_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-
-    if cfg.checkpoint:
-        cfg.checkpoint = to_absolute_path(cfg.checkpoint)
+    time_str = timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     if cfg.wandb_activate:
-        # Make sure to install WandB if you actually use this.
-
         run = WandbLogger(
             project=cfg.wandb_project,
             entity=cfg.wandb_entity,
             name=f"rainbow{time_str}",
             save_interval=50,
-            # monitor_gym=True, #while this could be problematic
         )
 
-    cwd = os_path.dirname(__file__)
     now = datetime.now()
-    timestamp = now.strftime("%m-%d-%Y_%H-%M-%S")
 
-    if cfg.env_name == "pklot":
-        train_env = SubprocVectorEnv([get_env for _ in range(cfg.num_train_envs)])
-        test_env = DummyVectorEnv([get_env for _ in range(cfg.num_test_envs)])
-        action_shape = 7
-    elif cfg.env_name == "pklot_unicycle":
+    if cfg.task_name == "pklot":
         train_env = SubprocVectorEnv(
-            [get_unicycle_env for _ in range(cfg.num_train_envs)]
+            [
+                get_env(num_agents=cfg.num_agents, max_cycles=cfg.max_cycles)
+                for _ in range(cfg.num_train_envs)
+            ]
         )
-        test_env = DummyVectorEnv([get_unicycle_env for _ in range(cfg.num_test_envs)])
+        test_env = DummyVectorEnv(
+            [
+                get_env(num_agents=cfg.num_agents, max_cycles=cfg.max_cycles)
+                for _ in range(cfg.num_test_envs)
+            ]
+        )
+        action_shape = 7
+    elif cfg.task_name == "pklot_unicycle":
+        train_env = SubprocVectorEnv(
+            [
+                get_unicycle_env(num_agents=cfg.num_agents, max_cycles=cfg.max_cycles)
+                for _ in range(cfg.num_train_envs)
+            ]
+        )
+        test_env = DummyVectorEnv(
+            [
+                get_unicycle_env(num_agents=cfg.num_agents, max_cycles=cfg.max_cycles)
+                for _ in range(cfg.num_test_envs)
+            ]
+        )
         temp = pklot_env_unicycle.parallel_env()
         action_shape = len(temp.actions)
         del temp
@@ -65,15 +72,14 @@ def launch_rlg_hydra(cfg: DictConfig):
     np.random.seed(seed)
     torch.manual_seed(seed)
 
-    # ======== Step 2: Agent setup =========
     policy, optim, agents = get_agents(
         num_agents=cfg.num_agents,
         discount_factor=cfg.discount_factor,
         estimation_step=cfg.estimation_step,
         action_shape=action_shape,
+        lr=cfg.lr,
+        target_update_freq=cfg.target_update_freq,
     )
-
-    # ======== Step 3: Collector setup =========
 
     train_collector = Collector(
         policy,
@@ -86,13 +92,15 @@ def launch_rlg_hydra(cfg: DictConfig):
         policy.policies[agent].set_eps(1)
     train_collector.collect(n_episode=cfg.batch_size * cfg.num_train_envs)
 
-    # ======== Step 4: Callback functions setup =========
-    # logger:
     logger = WandbLogger(
         project="confrez-tianshou",
         name=f"rainbow{cfg.task_name}_{timestamp}",
         save_interval=50,
     )
+    script_path = os.path.dirname(os.path.abspath(__file__))
+    log_path = os.path.join(script_path, f"log/dqn/run{timestamp}")
+    writer = SummaryWriter(log_path)
+    logger.load(writer)
 
     def save_best_fn(policy):
         os.makedirs(os.path.join("log", "dqn"), exist_ok=True)
@@ -100,30 +108,38 @@ def launch_rlg_hydra(cfg: DictConfig):
             model_save_path = os.path.join("log", "dqn", f"policy{i}.pth")
             torch.save(policy.policies[agent].state_dict(), model_save_path)
             logger.wandb_run.save(model_save_path)
-        render(agents, policy)
-        logger.wandb_run.log({"video": wandb.Video("out.gif", fps=4, format="gif")})
+        if cfg.task_name == "pklot":
+            render(agents, policy)
+            logger.wandb_run.log({"video": wandb.Video("out.gif", fps=4, format="gif")})
+        elif cfg.task_name == "pklot_unicycle":
+            render_unicycle(agents, policy)
+            logger.wandb_run.log({"video": wandb.Video("out.gif", fps=4, format="gif")})
 
     def stop_fn(mean_rewards):
-        # currently set to never stop
         return False
 
     def train_fn(epoch, env_step):
-        # print(env_step, policy.policies[agents[0]]._iter)
         for agent in agents:
             policy.policies[agent].set_eps(max(0.99**epoch, 0.1))
-            # train_collector.buffer.set_beta(min(0.4 * 1.02**epoch, 1))
 
     def test_fn(epoch, env_step):
         for agent in agents:
             policy.policies[agent].set_eps(0.0)
         if epoch % 50 == 0:
-            render(agents, policy)
-            logger.wandb_run.log({"video": wandb.Video("out.gif", fps=4, format="gif")})
+            if cfg.task_name == "pklot":
+                render(agents, policy)
+                logger.wandb_run.log(
+                    {"video": wandb.Video("out.gif", fps=4, format="gif")}
+                )
+            elif cfg.task_name == "pklot_unicycle":
+                render_unicycle(agents, policy)
+                logger.wandb_run.log(
+                    {"video": wandb.Video("out.gif", fps=4, format="gif")}
+                )
 
     def reward_metric(rews):
         return np.average(rews, axis=1)
 
-    # ======== Step 5: Run the trainer =========
     result = offpolicy_trainer(
         policy=policy,
         train_collector=train_collector,
@@ -147,4 +163,4 @@ def launch_rlg_hydra(cfg: DictConfig):
 
 
 if __name__ == "__main__":
-    launch_rlg_hydra()
+    launch()
