@@ -1,6 +1,7 @@
 import os
 from typing import Callable, List, Optional, Tuple
-import pklot_env
+import confrez.rl.envs.pklot_env
+import confrez.rl.envs.pklot_env_unicycle
 import supersuit as ss
 from datetime import datetime
 from os import path as os_path

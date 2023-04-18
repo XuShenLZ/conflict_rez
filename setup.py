@@ -17,7 +17,7 @@ setuptools.setup(
         "pytope",
         "pettingzoo==1.22.3",
         "supersuit==3.7.1",
-        "tinyscaler==1.2.5",
+        "tinyscaler",
         "pygame==2.1.3",
         "pyem",
         "lark",

@@ -3,8 +3,8 @@ from tianshou.data import Collector, VectorReplayBuffer
 from tianshou.data import Batch, to_numpy
 import PIL
 import os
-import pklot_env
-import pklot_env_unicycle
+import confrez.rl.envs.pklot_env
+import confrez.rl.envs.pklot_env_unicycle
 import supersuit as ss
 from tianshou.env import PettingZooEnv, DummyVectorEnv
 from PIL import Image
@@ -32,9 +32,7 @@ def get_agents():
                 optim=optim,
                 discount_factor=0.9,
                 estimation_step=4,
-                target_update_freq=int(
-                    5000
-                ),
+                target_update_freq=int(5000),
             ).to("cuda" if torch.cuda.is_available() else "cpu")
         )
 
@@ -45,7 +43,11 @@ def get_agents():
 def get_env(render_mode="human", n_vehicles=4):
     """This function is needed to provide callables for DummyVectorEnv."""
     env = pklot_env.raw_env(
-        n_vehicles=n_vehicles, random_reset=False, seed=1, max_cycles=500, render_mode=render_mode
+        n_vehicles=n_vehicles,
+        random_reset=False,
+        seed=1,
+        max_cycles=500,
+        render_mode=render_mode,
     )  # seed=1
     env = ss.black_death_v3(env)
     env = ss.resize_v1(env, 140, 140)
@@ -55,7 +57,11 @@ def get_env(render_mode="human", n_vehicles=4):
 def get_env_unicycle(render_mode="human", n_vehicles=4):
     """This function is needed to provide callables for DummyVectorEnv."""
     env = pklot_env_unicycle.raw_env(
-        n_vehicles=n_vehicles, random_reset=False, seed=1, max_cycles=500, render_mode=render_mode
+        n_vehicles=n_vehicles,
+        random_reset=False,
+        seed=1,
+        max_cycles=500,
+        render_mode=render_mode,
     )  # seed=1
     env = ss.black_death_v3(env)
     env = ss.resize_v1(env, 140, 140)
@@ -66,7 +72,9 @@ def render_human(agents, policy, n_vehicles=4):
     for i, agent in enumerate(agents):
         # shouldn't be in this way when num_agents > 1!
         filename = os.path.join("log", "dqn", f"policy{i}.pth")
-        policy.policies[agent].load_state_dict(torch.load(filename, map_location=torch.device('cuda')))
+        policy.policies[agent].load_state_dict(
+            torch.load(filename, map_location=torch.device("cuda"))
+        )
     for agent in agents:
         policy.policies[agent].set_eps(0)
     collector = Collector(policy, env, exploration_noise=False)
@@ -76,10 +84,10 @@ def render_human(agents, policy, n_vehicles=4):
 
 
 def render(agents, policy, n_vehicles=4):
-    env = get_env(render_mode='rgb_array', n_vehicles=n_vehicles)
+    env = get_env(render_mode="rgb_array", n_vehicles=n_vehicles)
     frame_list = []
     obs = env.reset()
-    obs = np.array([obs['obs']])
+    obs = np.array([obs["obs"]])
     done = False
     total_reward = 0
     while not done:
@@ -88,19 +96,21 @@ def render(agents, policy, n_vehicles=4):
             q, _ = policy.policies[agent].compute_q_value(logits, mask=None)
             act = to_numpy(q.max(dim=1)[1])
             obs, reward, done, _, _ = env.step(act)
-            obs = np.array([obs['obs']])
+            obs = np.array([obs["obs"]])
             frame_list.append(PIL.Image.fromarray(env.render()))
             total_reward += np.sum(reward)
 
     env.close()
-    frame_list[0].save('out.gif', save_all=True, append_images=frame_list[1:], duration=100, loop=0)
+    frame_list[0].save(
+        "out.gif", save_all=True, append_images=frame_list[1:], duration=100, loop=0
+    )
 
 
 def render_unicycle(agents, policy, n_vehicles=4):
-    env = get_env_unicycle(render_mode='rgb_array', n_vehicles=n_vehicles)
+    env = get_env_unicycle(render_mode="rgb_array", n_vehicles=n_vehicles)
     frame_list = []
     obs = env.reset()
-    obs = np.array([obs['obs']])
+    obs = np.array([obs["obs"]])
     done = False
     total_reward = 0
     while not done:
@@ -109,15 +119,17 @@ def render_unicycle(agents, policy, n_vehicles=4):
             q, _ = policy.policies[agent].compute_q_value(logits, mask=None)
             act = to_numpy(q.max(dim=1)[1])
             obs, reward, done, _, _ = env.step(act)
-            obs = np.array([obs['obs']])
+            obs = np.array([obs["obs"]])
             frame_list.append(PIL.Image.fromarray(env.render()))
             total_reward += np.sum(reward)
 
     env.close()
-    frame_list[0].save('out.gif', save_all=True, append_images=frame_list[1:], duration=100, loop=0)
+    frame_list[0].save(
+        "out.gif", save_all=True, append_images=frame_list[1:], duration=100, loop=0
+    )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # render_human()
     env = DummyVectorEnv([get_env])
     policy, agents = get_agents()
@@ -125,5 +137,7 @@ if __name__ == '__main__':
     for i, agent in enumerate(agents):
         # shouldn't be in this way when num_agents > 1!
         filename = os.path.join("log", "dqn", f"policy{i}.pth")
-        policy.policies[agent].load_state_dict(torch.load(filename, map_location=torch.device('cuda')))
+        policy.policies[agent].load_state_dict(
+            torch.load(filename, map_location=torch.device("cuda"))
+        )
     render(agents, policy)
