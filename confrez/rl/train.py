@@ -109,10 +109,10 @@ def launch(cfg: DictConfig):
             torch.save(policy.policies[agent].state_dict(), model_save_path)
             logger.wandb_run.save(model_save_path)
         if cfg.task_name == "pklot":
-            render(agents, policy)
+            render(agents, policy, n_vehicles=cfg.num_agents)
             logger.wandb_run.log({"video": wandb.Video("out.gif", fps=4, format="gif")})
         elif cfg.task_name == "pklot_unicycle":
-            render_unicycle(agents, policy)
+            render_unicycle(agents, policy, n_vehicles=cfg.num_agents)
             logger.wandb_run.log({"video": wandb.Video("out.gif", fps=4, format="gif")})
 
     def stop_fn(mean_rewards):
@@ -127,12 +127,12 @@ def launch(cfg: DictConfig):
             policy.policies[agent].set_eps(0.0)
         if epoch % 50 == 0:
             if cfg.task_name == "pklot":
-                render(agents, policy)
+                render(agents, policy, n_vehicles=cfg.num_agents)
                 logger.wandb_run.log(
                     {"video": wandb.Video("out.gif", fps=4, format="gif")}
                 )
             elif cfg.task_name == "pklot_unicycle":
-                render_unicycle(agents, policy)
+                render_unicycle(agents, policy, n_vehicles=cfg.num_agents)
                 logger.wandb_run.log(
                     {"video": wandb.Video("out.gif", fps=4, format="gif")}
                 )
