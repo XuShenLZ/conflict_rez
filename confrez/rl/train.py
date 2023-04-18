@@ -43,7 +43,7 @@ def launch(cfg: DictConfig):
                 for _ in range(cfg.num_train_envs)
             ]
         )
-        test_env = DummyVectorEnv(
+        test_env = SubprocVectorEnv(
             [
                 get_env(num_agents=cfg.num_agents, max_cycles=cfg.max_cycles)
                 for _ in range(cfg.num_test_envs)
@@ -57,7 +57,7 @@ def launch(cfg: DictConfig):
                 for _ in range(cfg.num_train_envs)
             ]
         )
-        test_env = DummyVectorEnv(
+        test_env = SubprocVectorEnv(
             [
                 get_unicycle_env(num_agents=cfg.num_agents, max_cycles=cfg.max_cycles)
                 for _ in range(cfg.num_test_envs)
