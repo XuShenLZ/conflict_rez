@@ -1,0 +1,22 @@
+diff --git a/confrez/rl/cfg/config.yaml b/confrez/rl/cfg/config.yaml
+index 148abd9..373df56 100644
+--- a/confrez/rl/cfg/config.yaml
++++ b/confrez/rl/cfg/config.yaml
+@@ -3,7 +3,7 @@ checkpoint: ''
+ wandb_activate: True
+ wandb_group: ''
+ wandb_name: dqn
+-wandb_entity: 'chengtianyue'
++wandb_entity: 'confrez'
+ wandb_project: 'confrez-tianshou'
+ 
+ num_agents: 1
+diff --git a/confrez/rl/wandb/latest-run b/confrez/rl/wandb/latest-run
+index 963b74b..97d9d07 120000
+--- a/confrez/rl/wandb/latest-run
++++ b/confrez/rl/wandb/latest-run
+@@ -1 +1 @@
+-offline-run-20230417_233348-xsm08pit
+\ No newline at end of file
++run-20230417_235045-1lb1j55q
+\ No newline at end of file
