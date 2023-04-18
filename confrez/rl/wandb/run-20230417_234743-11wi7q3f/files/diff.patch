@@ -1,0 +1,9 @@
+diff --git a/confrez/rl/wandb/latest-run b/confrez/rl/wandb/latest-run
+index 963b74b..922b419 120000
+--- a/confrez/rl/wandb/latest-run
++++ b/confrez/rl/wandb/latest-run
+@@ -1 +1 @@
+-offline-run-20230417_233348-xsm08pit
+\ No newline at end of file
++run-20230417_234743-11wi7q3f
+\ No newline at end of file

@@ -1,27 +1,23 @@
-task_name: 'pklot_unicycle'
+task_name: pklot_unicycle
 checkpoint: ''
-wandb_activate: True
+wandb_activate: true
 wandb_group: ''
 wandb_name: dqn
-wandb_entity: 'confrez'
-wandb_project: 'confrez-tianshou'
-
+wandb_entity: confrez
+wandb_project: confrez-tianshou
 num_agents: 1
 num_train_envs: 1
 num_test_envs: 1
 max_cycles: 500
 seed: 42
-
 buffer_size: 100000
-
 max_epoch: 10000
 step_per_epoch: 500
 step_per_collect: 10
 episode_per_test: 1
 batch_size: 64
 update_per_step: 0.1
-lr: 1e-4
+lr: 0.0001
 target_update_freq: 1000
-
 discount_factor: 0.99
 estimation_step: 4

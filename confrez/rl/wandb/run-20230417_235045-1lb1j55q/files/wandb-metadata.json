@@ -1,0 +1,22 @@
+{
+    "os": "Linux-5.15.0-69-generic-x86_64-with-glibc2.29",
+    "python": "3.8.10",
+    "heartbeatAt": "2023-04-18T06:50:45.698576",
+    "startedAt": "2023-04-18T06:50:45.151060",
+    "docker": null,
+    "cpu_count": 16,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "train.py",
+    "codePath": "confrez/rl/train.py",
+    "git": {
+        "remote": "git@github.com-tianyue:XuShenLZ/conflict_rez.git",
+        "commit": "3d0ecb84e21b8c327874c6445ed06ef9f7bfeb46"
+    },
+    "email": "tianyue.cheng@berkeley.edu",
+    "root": "/home/mpc/xu_ws/tianyue/conflict_rez",
+    "host": "mpc-Alienware-Area-51m",
+    "username": "mpc",
+    "executable": "/home/mpc/.virtualenvs/tianyue/bin/python"
+}
