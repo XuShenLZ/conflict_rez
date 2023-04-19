@@ -94,7 +94,7 @@ def launch(cfg: DictConfig):
 
     logger = WandbLogger(
         project="confrez-tianshou",
-        name=f"rainbow{cfg.task_name}_{timestamp}",
+        name=f"sweep_rainbow{cfg.task_name}_{timestamp}",
         save_interval=50,
     )
     script_path = os.path.dirname(os.path.abspath(__file__))

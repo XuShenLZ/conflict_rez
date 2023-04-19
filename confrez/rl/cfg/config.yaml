@@ -6,22 +6,22 @@ wandb_name: dqn
 wandb_entity: 'confrez'
 wandb_project: 'confrez-tianshou'
 
-num_agents: 1
-num_train_envs: 16
-num_test_envs: 8
-max_cycles: 500
-seed: 42
+num_agents: 1 # fixed
+num_train_envs: 16 # fixed
+num_test_envs: 8 # fixed
+max_cycles: 500 # fixed
+seed: 42 # fixed
 
-buffer_size: 100000
+buffer_size: 100000 #log
 
-max_epoch: 5
-step_per_epoch: 500
+max_epoch: 100 # fixed
+step_per_epoch: 500 # fixed
 step_per_collect: 10
 episode_per_test: 1
 batch_size: 64
 update_per_step: 0.1
-lr: 1e-4
+lr: 1e-4 # log
 target_update_freq: 1000
 
 discount_factor: 0.99
-estimation_step: 4
+estimation_step: 4 # multiple of agents
