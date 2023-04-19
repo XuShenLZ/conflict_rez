@@ -15,7 +15,8 @@ parameters:
   buffer_size:
     values:
       - 100000
-      - 1000000
+      - 50000
+      - 10000
   step_per_collect:
     distribution: int_uniform
     min: 1

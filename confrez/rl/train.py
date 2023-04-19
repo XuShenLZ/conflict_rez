@@ -27,14 +27,12 @@ def launch(cfg: DictConfig):
     time_str = timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     if cfg.wandb_activate:
-        run = WandbLogger(
+        logger = WandbLogger(
             project=cfg.wandb_project,
             entity=cfg.wandb_entity,
             name=f"rainbow{time_str}",
             save_interval=50,
         )
-
-    now = datetime.now()
 
     if cfg.task_name == "pklot":
         train_env = SubprocVectorEnv(
@@ -91,12 +89,6 @@ def launch(cfg: DictConfig):
     for agent in agents:
         policy.policies[agent].set_eps(1)
     train_collector.collect(n_episode=cfg.batch_size * cfg.num_train_envs)
-
-    logger = WandbLogger(
-        project="confrez-tianshou",
-        name=f"sweep_rainbow{cfg.task_name}_{timestamp}",
-        save_interval=50,
-    )
     script_path = os.path.dirname(os.path.abspath(__file__))
     log_path = os.path.join(script_path, f"log/dqn/run{timestamp}")
     writer = SummaryWriter(log_path)
