@@ -30,7 +30,7 @@ def launch(cfg: DictConfig):
         logger = WandbLogger(
             project=cfg.wandb_project,
             entity=cfg.wandb_entity,
-            name=f"rainbow{time_str}",
+            name=f"sweep_rainbow{time_str}",
             save_interval=50,
         )
 
