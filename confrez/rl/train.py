@@ -152,6 +152,7 @@ def launch(cfg: DictConfig):
     )
 
     print("result: ", result)
+    wandb.finish()
 
 
 if __name__ == "__main__":
