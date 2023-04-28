@@ -140,7 +140,7 @@ class Actor(nn.Module):
         with torch.no_grad():
             for o in obs:
                 obs_transformed = transform(o)
-            obs_transformed = obs_transformed.reshape(1, 3, 140, 140)
+            obs_transformed = obs_transformed.reshape(state_shape)
             after_cnn = self.cnn(obs_transformed.float())
             n_flatten = after_cnn.shape[1]
 
@@ -185,7 +185,7 @@ class Critic(nn.Module):
         with torch.no_grad():
             for o in obs:
                 obs_transformed = transform(np.array(o))
-            obs_transformed = obs_transformed.reshape(1, 3, 140, 140)
+            obs_transformed = obs_transformed.reshape(state_shape)
             after_cnn = self.cnn(obs_transformed.float())
             n_flatten = after_cnn.shape[1]
         self.linear = nn.Sequential(

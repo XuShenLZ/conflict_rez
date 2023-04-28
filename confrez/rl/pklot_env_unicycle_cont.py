@@ -12,8 +12,9 @@ import numpy as np
 import pygame
 from gymnasium.utils import EzPickle, seeding
 
-from pettingzoo import ParallelEnv
+from pettingzoo import ParallelEnv, AECEnv
 from pettingzoo.utils import wrappers, parallel_to_aec
+from pettingzoo.utils.conversions import parallel_wrapper_fn
 from confrez.obstacle_types import GeofenceRegion
 
 from confrez.pytypes import PythonMsg, VehicleState
@@ -77,7 +78,7 @@ def raw_env(**kwargs):
 
 
 class parallel_env(ParallelEnv, EzPickle):
-    metadata = {"render_modes": ["human", "rgb_array"], "name": "pklot"}
+    metadata = {"render_modes": ["human", "rgb_array"], "name": "pklot", "is_parallelizable": True,}
 
     def __init__(
         self,

@@ -24,13 +24,14 @@ from tianshou.utils import WandbLogger
 import wandb
 from torch.utils.tensorboard import SummaryWriter
 from tianshou_experiment import render_unicycle
+from pettingzoo.butterfly import pistonball_v6
 
 cwd = os_path.dirname(__file__)
 now = datetime.now()
 timestamp = now.strftime("%m-%d-%Y_%H-%M-%S")
 
 MODEL_NAME = "Tianshou-Multiagent"
-NUM_AGENT = 1
+NUM_AGENT = 2
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 params = pklot_env_unicycle_cont.EnvParams(
@@ -65,16 +66,17 @@ def step_schedule(
 
 def get_env(render_mode="human"):
     """This function is needed to provide callables for DummyVectorEnv."""
-    env = pklot_env_unicycle_cont.raw_env(
-        n_vehicles=NUM_AGENT,
-        random_reset=False,
-        seed=1,
-        max_cycles=500,
-        render_mode=render_mode,
-        params=params
-    )  # seed=1
-    env = ss.black_death_v3(env)
-    env = ss.resize_v1(env, 140, 140)
+    # env = pklot_env_unicycle_cont.raw_env(
+    #     n_vehicles=NUM_AGENT,
+    #     random_reset=False,
+    #     seed=1,
+    #     max_cycles=500,
+    #     render_mode=render_mode,
+    #     params=params
+    # )  # seed=1
+    env = pistonball_v6.env(n_pistons=2, continuous=True)
+    # env = ss.black_death_v3(env)
+    # env = ss.resize_v1(env, 140, 140)
     return PettingZooEnv(env)
 
 
@@ -84,14 +86,14 @@ def get_agents() -> Tuple[BasePolicy, List[torch.optim.Optimizer], list]:
     optims = []
     for _ in range(NUM_AGENT):
         actor = Actor(
-            state_shape=(10, 3, 140, 140),
-            action_shape=2,
+            state_shape=(1, 3, 457, 120),  # (10, 3, 140, 140),
+            action_shape=1,
             obs=env.observation_space.sample()[None],
             device="cuda" if torch.cuda.is_available() else "cpu",
         ).to("cuda" if torch.cuda.is_available() else "cpu")
 
         critic = Critic(
-            state_shape=(10, 3, 140, 140),
+            state_shape=(1, 3, 457, 120),  #(10, 3, 140, 140),
             obs=env.observation_space.sample()[None],
             device="cuda" if torch.cuda.is_available() else "cpu",
         ).to("cuda" if torch.cuda.is_available() else "cpu")
@@ -110,7 +112,7 @@ def get_agents() -> Tuple[BasePolicy, List[torch.optim.Optimizer], list]:
             ).to("cuda" if torch.cuda.is_available() else "cpu")
         )
 
-    policy = MultiAgentPolicyManager(agents, env)
+    policy = MultiAgentPolicyManager(agents, env, action_bound_method='clip')
     return policy, optims, env.agents
 
 
@@ -135,11 +137,11 @@ if __name__ == "__main__":
         policy,
         train_env,
         # PrioritizedVectorReplayBuffer(100000, len(train_env), alpha=0.5, beta=0.4),
-        VectorReplayBuffer(100000, len(train_env)),
+        VectorReplayBuffer(10000, len(train_env)),
         exploration_noise=True,
     )
     test_collector = Collector(policy, test_env)
-    train_collector.collect(n_episode=100)  # batch size * training_num TODO
+    train_collector.collect(n_episode=10, random=True)  # batch size * training_num TODO
 
 
     # ======== Step 4: Callback functions setup =========
@@ -153,12 +155,12 @@ if __name__ == "__main__":
     # logger.load(writer)
 
     def save_best_fn(policy):
-        os.makedirs(os.path.join("log", "dqn"), exist_ok=True)
+        os.makedirs(os.path.join("log", "ddpg"), exist_ok=True)
         for i, agent in enumerate(agents):
-            model_save_path = os.path.join("log", "dqn", f"policy{i}.pth")
+            model_save_path = os.path.join("log", "ddpg", f"policy{i}.pth")
             torch.save(policy.policies[agent].state_dict(), model_save_path)
             # logger.wandb_run.save(model_save_path)
-        render_unicycle(agents, policy, n_vehicles=NUM_AGENT)
+        # render_unicycle(agents, policy, n_vehicles=NUM_AGENT)
         # logger.wandb_run.log({"video": wandb.Video("out.gif", fps=4, format="gif")})
 
 
@@ -173,15 +175,15 @@ if __name__ == "__main__":
         return stop_fn
 
 
-
     def train_fn(epoch, env_step):
         # print(env_step, policy.policies[agents[0]]._iter)
-        pass
+        for agent in agents:
+            policy.policies[agent].set_exp_noise(0.1 * max((0.997 ** epoch), 0.5))
 
 
     def test_fn(epoch, env_step):
         for agent in agents:
-            policy.policies[agent]
+            policy.policies[agent].set_exp_noise(0)
 
 
     def reward_metric(rews):

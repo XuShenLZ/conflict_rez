@@ -30,7 +30,7 @@ now = datetime.now()
 timestamp = now.strftime("%m-%d-%Y_%H-%M-%S")
 
 MODEL_NAME = "Tianshou-Multiagent"
-NUM_AGENT = 2
+NUM_AGENT = 1
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
@@ -94,7 +94,10 @@ def get_agents() -> Tuple[BasePolicy, List[torch.optim.Optimizer], list]:
             device="cuda" if torch.cuda.is_available() else "cpu",
         ).to("cuda" if torch.cuda.is_available() else "cpu")
 
-        net.load_state_dict(torch.load('policy0.pth'), strict=False)
+        # net.load_state_dict(torch.load('policy0.pth'), strict=False)
+        # for name, parameter in net.named_parameters():
+        #     if 'cnn' in name:
+        #         parameter.requires_grad = False
 
         optim = torch.optim.Adam(net.parameters(), lr=1e-4)  # , eps=1.5e-4
         optims.append(optim)
@@ -103,7 +106,7 @@ def get_agents() -> Tuple[BasePolicy, List[torch.optim.Optimizer], list]:
             DQNPolicy(
                 model=net,
                 optim=optim,
-                discount_factor=0.99,
+                discount_factor=0.9,
                 estimation_step=NUM_AGENT,
                 target_update_freq=int(8000),
             ).to("cuda" if torch.cuda.is_available() else "cpu")
@@ -145,7 +148,7 @@ if __name__ == "__main__":
     # ======== Step 4: Callback functions setup =========
     # logger:
     logger = WandbLogger(
-        project="confrez-tianshou", name=f"rainbow{timestamp}", save_interval=50
+        project="confrez-tianshou", name=f"rainbow{timestamp}-sanitycheck", save_interval=50
     )
     script_path = os.path.dirname(os.path.abspath(__file__))
     log_path = os.path.join(script_path, f"log/dqn/run{timestamp}")
@@ -175,6 +178,7 @@ if __name__ == "__main__":
     def train_fn(epoch, env_step):
         # print(env_step, policy.policies[agents[0]]._iter)
         for agent in agents:
+            # policy.policies[agent].set_eps(0.1)
             policy.policies[agent].set_eps(max(0.997**epoch, 0.1))
             # train_collector.buffer.set_beta(min(0.4 * 1.02**epoch, 1))
 
