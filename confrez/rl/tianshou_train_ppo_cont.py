@@ -4,7 +4,7 @@ from typing import Callable, List, Optional, Tuple, Union, Dict, Any
 
 from tianshou.utils.net.continuous import ActorProb, Critic, Actor
 
-import pklot_env
+import pklot_env_unicycle_cont as pklot_env
 import supersuit as ss
 from datetime import datetime
 from os import path as os_path
@@ -23,7 +23,31 @@ from tianshou.utils import WandbLogger, TensorboardLogger
 from torch.utils.tensorboard import SummaryWriter
 from torch.distributions import Categorical, Independent, Normal
 from torch import nn
-from pettingzoo.butterfly import pistonball_v6
+from tianshou_experiment import render_ppo
+import wandb
+
+class CNNDQN(nn.Module):
+    def __init__(self, state_shape, device, feature_dim=512) -> None:
+        super().__init__()
+        self.device = device
+        self.net = nn.Sequential(
+            nn.Conv2d(state_shape[1], 32, kernel_size=8, stride=4), nn.ReLU(inplace=True),
+            nn.Conv2d(32, 64, kernel_size=4, stride=2), nn.ReLU(inplace=True),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1), nn.ReLU(inplace=True),
+            nn.Flatten()
+        )
+        with torch.no_grad():
+            self.output_dim = np.prod(self.net(torch.zeros(state_shape)).shape[1:])
+
+    def forward(self, obs, state=None, info={}):
+        obs = obs.reshape(-1, 140, 140, 3)
+        if type(obs) is np.ndarray:
+            obs = torch.tensor(obs, dtype=torch.float)
+        obs = torch.transpose(obs, 1, 3)
+        # print("DEBUG: obs shape", obs.shape)
+        obs = obs.to(device=self.device)
+
+        return self.net(obs), state
 
 
 class DQN(nn.Module):
@@ -33,11 +57,11 @@ class DQN(nn.Module):
     """
 
     def __init__(
-        self,
-        c: int,
-        h: int,
-        w: int,
-        device: Union[str, int, torch.device] = "cpu",
+            self,
+            c: int,
+            h: int,
+            w: int,
+            device: Union[str, int, torch.device] = "cpu",
     ) -> None:
         super().__init__()
         self.device = device
@@ -54,10 +78,10 @@ class DQN(nn.Module):
             self.output_dim = np.prod(self.net(torch.zeros(1, c, h, w)).shape[1:])
 
     def forward(
-        self,
-        x: Union[np.ndarray, torch.Tensor],
-        state: Optional[Any] = None,
-        info: Dict[str, Any] = {},
+            self,
+            x: Union[np.ndarray, torch.Tensor],
+            state: Optional[Any] = None,
+            info: Dict[str, Any] = {},
     ) -> Tuple[torch.Tensor, Any]:
         r"""Mapping: x -> Q(x, \*)."""
         x = torch.as_tensor(x, device=self.device, dtype=torch.float32)
@@ -70,7 +94,7 @@ timestamp = now.strftime("%m-%d-%Y_%H-%M-%S")
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 MODEL_NAME = "Tianshou-Multiagent-PPO"
-NUM_AGENT = 3
+NUM_AGENT = 1
 
 
 def step_schedule(
@@ -98,12 +122,11 @@ def step_schedule(
     return func
 
 
-def get_env():
+def get_env(render_mode='human'):
     """This function is needed to provide callables for DummyVectorEnv."""
-    # env = pklot_env.raw_env(n_vehicles=NUM_AGENT, random_reset=False, seed=1)
-    # env = ss.black_death_v3(env)
-    # env = ss.resize_v1(env, 140, 140)
-    env = pistonball_v6.env(n_pistons=NUM_AGENT, continuous=True)
+    env = pklot_env.raw_env(render_mode=render_mode, n_vehicles=NUM_AGENT, random_reset=False, seed=1)
+    env = ss.black_death_v3(env)
+    env = ss.resize_v1(env, 140, 140)
     return PettingZooEnv(env)
 
 
@@ -112,35 +135,28 @@ def get_agents(
 ) -> Tuple[BasePolicy, torch.optim.Optimizer, list]:
     env = get_env()
     agents = []
-    observation_space = (457, 120, 3)
+    observation_space = (10, 3, 140, 140)
     for _ in range(NUM_AGENT):
-        net = DQN(
-            observation_space[2],
-            observation_space[1],
-            observation_space[0],
-            device=device
-        ).to(device)
+        net = CNNDQN(observation_space, device=device).to(device)
 
         actor = ActorProb(
             net, action_shape=env.action_space.shape, device=device, max_action=env.action_space.high[0]
         ).to(device)
-        net2 = DQN(
-            observation_space[2],
-            observation_space[1],
-            observation_space[0],
-            device=device
-        ).to(device)
+        net2 = CNNDQN(observation_space, device=device).to(device)
         critic = Critic(net2, device=device).to(device)
         for m in set(actor.modules()).union(critic.modules()):
             if isinstance(m, torch.nn.Linear):
                 torch.nn.init.orthogonal_(m.weight)
                 torch.nn.init.zeros_(m.bias)
         optim = torch.optim.Adam(
-            set(actor.parameters()).union(critic.parameters()), lr=1e-4
+            set(actor.parameters()).union(critic.parameters()), lr=1e-5
         )
 
         def dist(*logits):
-            return Independent(Normal(*logits), 1)
+            try:
+                return Independent(Normal(*logits), 1)
+            except ValueError:
+                pass
             # return TanhTransform(*logits)
 
         agents.append(
@@ -150,19 +166,18 @@ def get_agents(
                 optim=optim,
                 discount_factor=0.9,
                 dist_fn=dist,
+                vf_coef=0.25,
                 ent_coef=0.01,
-                eps_clip=0.2,
+                eps_clip=0.1,
                 gae_lambda=0.95,
-                max_grad_norm=0.5,
+                max_grad_norm=0.25,
                 action_scaling=True,
                 reward_normalization=1,
-                dual_clip=None,
                 value_clip=True,
                 advantage_normalization=True,
                 recompute_advantage=False,
-                action_bound_method='clip',
                 action_space=env.action_space
-            ) #.to(device)
+            )  # .to(device)
         )
 
     policy = MultiAgentPolicyManager(agents, env, action_scaling=True,
@@ -189,7 +204,6 @@ if __name__ == "__main__":
     buffer = VectorReplayBuffer(
         2000,
         buffer_num=len(train_env),
-        ignore_obs_next=True,
     )
 
     train_collector = Collector(
@@ -199,6 +213,7 @@ if __name__ == "__main__":
     )
     test_collector = Collector(policy, test_env)
 
+
     # ======== Step 4: Callback functions setup =========
 
     def save_best_fn(policy):
@@ -207,6 +222,8 @@ if __name__ == "__main__":
         for agent in agents:
             torch.save(policy.policies[agent].state_dict(), model_save_path)
             logger.wandb_run.save(model_save_path)
+        render_ppo(agents, policy, get_env(render_mode='rgb_array'))
+        logger.wandb_run.log({"video": wandb.Video("out.gif", fps=4, format="gif")})
 
 
     def stop_over_n(n=10):
@@ -215,7 +232,7 @@ if __name__ == "__main__":
         def stop_fn(mean_rewards):
             # currently set to never stop
             mean_n.append(mean_rewards)
-            return np.mean(mean_n) >= 90
+            return np.mean(mean_n) >= 70
 
 
     def train_fn(epoch, env_step):
@@ -237,12 +254,13 @@ if __name__ == "__main__":
         print("Testing agent ...")
         test_collector.reset()
         result = test_collector.collect(
-            n_episode=1, render=1/30
+            n_episode=1, render=1 / 30
         )
         rew = result["rews"].mean()
         print(f"Mean reward (over {result['n/ep']} episodes): {rew}")
 
-    logger = WandbLogger(project="confrez-tianshou", name=f"ppo_pistonball{timestamp}", save_interval=4)
+
+    logger = WandbLogger(project="confrez-tianshou", name=f"ppo_cont{timestamp}", save_interval=4)
     script_path = os.path.dirname(os.path.abspath(__file__))
     log_path = os.path.join(script_path, f"log/ppo/run{timestamp}")
     writer = SummaryWriter(log_path)
@@ -258,7 +276,7 @@ if __name__ == "__main__":
         # step_per_collect=640,
         episode_per_collect=16,
         episode_per_test=4,
-        batch_size=32*NUM_AGENT,
+        batch_size=32,
         train_fn=train_fn,
         test_fn=test_fn,
         stop_fn=stop_over_n(5),

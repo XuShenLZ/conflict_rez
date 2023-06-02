@@ -11,6 +11,7 @@ from PIL import Image
 import numpy as np
 from model import DuelingDQN
 from tianshou.policy import DQNPolicy, MultiAgentPolicyManager
+from torch.distributions import Independent, Normal
 
 
 def get_agents():
@@ -88,6 +89,26 @@ def render(agents, policy, n_vehicles=4):
             q, _ = policy.policies[agent].compute_q_value(logits, mask=None)
             act = to_numpy(q.max(dim=1)[1])
             obs, reward, done, _, _ = env.step(act)
+            obs = np.array([obs['obs']])
+            frame_list.append(PIL.Image.fromarray(env.render()))
+            total_reward += np.sum(reward)
+
+    env.close()
+    frame_list[0].save('out.gif', save_all=True, append_images=frame_list[1:], duration=100, loop=0)
+
+
+def render_ppo(agents, policy, env):
+    frame_list = []
+    obs, _ = env.reset()
+    obs = np.array([obs['obs']])
+    done = False
+    total_reward = 0
+
+    while not done:
+        for agent in agents:
+            (mu, sigma), _ = policy.policies[agent].actor.forward(obs)
+            act = Independent(Normal(mu, sigma), 1).sample().cpu().numpy()
+            obs, reward, done, _, _ = env.step(act[0])
             obs = np.array([obs['obs']])
             frame_list.append(PIL.Image.fromarray(env.render()))
             total_reward += np.sum(reward)

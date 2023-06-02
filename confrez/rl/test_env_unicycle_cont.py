@@ -15,7 +15,7 @@ from pettingzoo.test.seed_test import parallel_seed_test
 parallel_api_test(parallel_env(), num_cycles=300)
 print("passed parallel api test")
 
-parallel_seed_test(parallel_env, num_cycles=10, test_kept_state=True)
+parallel_seed_test(parallel_env)
 print("passed parallel seed test")
 
 max_cycles_test(pklot_env_unicycle_cont)
