@@ -97,7 +97,31 @@ def render(agents, policy, n_vehicles=4):
     frame_list[0].save('out.gif', save_all=True, append_images=frame_list[1:], duration=100, loop=0)
 
 
-def render_ppo(agents, policy, env):
+def render_actor(agents, policy, env):
+    frame_list = []
+    obs, _ = env.reset()
+    obs = np.array([obs['obs']])
+    done = False
+    truncate = False
+    total_reward = 0
+
+    while not done and not truncate:
+        for agent in agents:
+            if type(obs) is not np.ndarray:
+                obs = np.array(obs['obs'])[np.newaxis, :, :, :]
+            act = policy.policies[agent].actor.forward(obs)
+            obs, reward, done, truncate, _ = env.step(act[0][0].cpu().detach().numpy())
+            if done or truncate:
+                break
+            obs = np.array([obs['obs']])
+            frame_list.append(PIL.Image.fromarray(env.render()))
+            total_reward += np.sum(reward)
+
+    env.close()
+    frame_list[0].save('out.gif', save_all=True, append_images=frame_list[1:], duration=100, loop=0)
+
+
+def render_actor_prob(agents, policy, env):
     frame_list = []
     obs, _ = env.reset()
     obs = np.array([obs['obs']])

@@ -17,6 +17,7 @@ from torch import nn
 import torch.nn.functional as F
 import gymnasium as gym
 from tianshou.utils.net.common import Net, MLP
+import tianshou
 
 ModuleType = Type[nn.Module]
 
@@ -227,3 +228,50 @@ class ResBlock(nn.Module):
 
         out += res
         return F.relu(out)
+
+
+class CriticCont(nn.Module):
+    def __init__(
+        self,
+        state_shape,
+        action_shape,
+        device: Union[str, int, torch.device] = "cpu",
+    ) -> None:
+        super().__init__()
+        self.device = device
+        self.conv = nn.Sequential(
+            nn.Conv2d(state_shape[1], 32, kernel_size=8, stride=4), nn.ReLU(inplace=True),
+            nn.Conv2d(32, 64, kernel_size=4, stride=2), nn.ReLU(inplace=True),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1), nn.ReLU(inplace=True),
+            nn.Flatten()
+        ).to(device)
+        with torch.no_grad():
+            dim = np.prod(self.conv(torch.zeros(state_shape).to(device)).shape[1:])
+        self.lin1 = nn.Linear(dim, 256)
+        self.last = nn.Sequential(
+            nn.Linear(256 + action_shape, 256), nn.ReLU(inplace=True),
+            nn.Linear(256, 1)
+        ).to(device)
+
+    def forward(
+        self,
+        obs: Union[np.ndarray, torch.Tensor],
+        act: Optional[Union[np.ndarray, torch.Tensor]] = None,
+        info: Dict[str, Any] = {},
+    ) -> torch.Tensor:
+        """Mapping: (s, a) -> logits -> Q(s, a)."""
+        if type(obs) is tianshou.data.Batch:
+            obs = obs['obs']
+        # obs = obs.reshape(-1, 140, 140, 3)
+        if type(obs) is np.ndarray:
+            obs = torch.tensor(obs, dtype=torch.float).to(self.device)
+        else:
+            pass
+        obs = torch.transpose(obs, 1, 3).to(self.device)
+        if type(act) is np.ndarray:
+            act = torch.tensor(act, dtype=torch.float).to(self.device)
+        logits = self.conv(obs)
+        logits = F.relu(self.lin1(logits))
+        logits = torch.cat((logits, act), 1)
+        logits = self.last(logits)
+        return logits

@@ -2,7 +2,8 @@ import os
 from collections import deque
 from typing import Callable, List, Optional, Tuple, Union, Dict, Any
 
-from tianshou.utils.net.continuous import ActorProb, Critic, RecurrentCritic, RecurrentActorProb
+import tianshou.data
+from tianshou.utils.net.continuous import ActorProb, Critic, Actor
 
 import pklot_env_unicycle_cont as pklot_env
 import supersuit as ss
@@ -16,20 +17,22 @@ from tianshou.data import Collector, VectorReplayBuffer
 from tianshou.env import DummyVectorEnv, PettingZooEnv, SubprocVectorEnv
 from torch.distributions.transforms import TanhTransform
 
-from tianshou.policy import BasePolicy, PPOPolicy, MultiAgentPolicyManager
-from tianshou.trainer import onpolicy_trainer
+from tianshou.policy import BasePolicy, PPOPolicy, MultiAgentPolicyManager, SACPolicy, DDPGPolicy
+from tianshou.trainer import onpolicy_trainer, offpolicy_trainer
 
 from tianshou.utils import WandbLogger, TensorboardLogger
 from torch.utils.tensorboard import SummaryWriter
 from torch.distributions import Categorical, Independent, Normal
+from tianshou.exploration import GaussianNoise
 from torch import nn
-from tianshou_experiment import render_actor_prob
+from tianshou_experiment import render_actor_prob, render_actor
 import wandb
-
+from model import CriticCont
 
 params = pklot_env.EnvParams(
-    reward_stop=-0, reward_dist=-10
+    reward_stop=-10, reward_dist=-1
 )
+
 
 class CNNDQN(nn.Module):
     def __init__(self, state_shape, device) -> None:
@@ -48,11 +51,12 @@ class CNNDQN(nn.Module):
         self.output_dim = 512
 
     def forward(self, obs, state=None, info={}):
+        if type(obs) is tianshou.data.Batch:
+            obs = obs['obs']
         obs = obs.reshape(-1, 140, 140, 3)
         if type(obs) is np.ndarray:
             obs = torch.tensor(obs, dtype=torch.float)
         else:
-            # obs = torch.transpose(obs, 1, 2)
             pass
         obs = torch.transpose(obs, 1, 3)
         # print("DEBUG: obs shape", obs.shape)
@@ -61,50 +65,12 @@ class CNNDQN(nn.Module):
         return logits, state
 
 
-class DQN(nn.Module):
-    """Reference: Human-level control through deep reinforcement learning.
-    For advanced usage (how to customize the network), please refer to
-    :ref:`build_the_network`.
-    """
-
-    def __init__(
-            self,
-            c: int,
-            h: int,
-            w: int,
-            device: Union[str, int, torch.device] = "cpu",
-    ) -> None:
-        super().__init__()
-        self.device = device
-        self.c = c
-        self.h = h
-        self.w = w
-        self.net = nn.Sequential(
-            nn.Conv2d(c, 32, kernel_size=8, stride=4), nn.ReLU(inplace=True),
-            nn.Conv2d(32, 64, kernel_size=4, stride=2), nn.ReLU(inplace=True),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1), nn.ReLU(inplace=True),
-            nn.Flatten()
-        )
-        with torch.no_grad():
-            self.output_dim = np.prod(self.net(torch.zeros(1, c, h, w)).shape[1:])
-
-    def forward(
-            self,
-            x: Union[np.ndarray, torch.Tensor],
-            state: Optional[Any] = None,
-            info: Dict[str, Any] = {},
-    ) -> Tuple[torch.Tensor, Any]:
-        r"""Mapping: x -> Q(x, \*)."""
-        x = torch.as_tensor(x, device=self.device, dtype=torch.float32)
-        return self.net(x.reshape(-1, self.c, self.w, self.h)), state
-
-
 cwd = os_path.dirname(__file__)
 now = datetime.now()
 timestamp = now.strftime("%m-%d-%Y_%H-%M-%S")
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-MODEL_NAME = "Tianshou-Multiagent-PPO"
+MODEL_NAME = "Tianshou-Multiagent-SAC"
 NUM_AGENT = 1
 
 
@@ -148,50 +114,40 @@ def get_agents(
     agents = []
     observation_space = (10, 3, 140, 140)
     for _ in range(NUM_AGENT):
+        max_action = env.action_space.high[0]
+        exploration_noise = 0.1 * max_action
         net = CNNDQN(observation_space, device=device).to(device)
-
         actor = ActorProb(
-            net, action_shape=env.action_space.shape, device=device, max_action=env.action_space.high[0],
-            unbounded=True
+            net, action_shape=env.action_space.shape, device=device, max_action=max_action,
+            unbounded=True, conditioned_sigma=True
         ).to(device)
-        net2 = CNNDQN(observation_space, device=device).to(device)
-        critic = Critic(net2, device=device).to(device)
-        for m in set(actor.modules()).union(critic.modules()):
-            if isinstance(m, torch.nn.Linear):
-                torch.nn.init.orthogonal_(m.weight)
-                torch.nn.init.zeros_(m.bias)
-        optim = torch.optim.Adam(
-            set(actor.parameters()).union(critic.parameters()), lr=3e-4
-        )
 
-        def dist(*logits):
-            return Independent(Normal(*logits), 1)
-            # return TanhTransform(*logits)
+        critic1 = CriticCont(observation_space, env.action_space.shape[0], device=device).to(device)
+        critic2 = CriticCont(observation_space, env.action_space.shape[0], device=device).to(device)
+
+        actor_optim = torch.optim.Adam(actor.parameters(), lr=1e-4)
+        critic1_optim = torch.optim.Adam(critic1.parameters(), lr=1e-5)
+        critic2_optim = torch.optim.Adam(critic2.parameters(), lr=1e-5)
 
         agents.append(
-            PPOPolicy(
-                actor=actor,
-                critic=critic,
-                optim=optim,
-                discount_factor=0.9,
-                dist_fn=dist,
-                vf_coef=0.25,
-                ent_coef=0.05,
-                eps_clip=0.2,
-                gae_lambda=0.95,
-                max_grad_norm=0.5,
-                action_scaling=True,
-                reward_normalization=True,
-                value_clip=False,
-                advantage_normalization=False,
-                recompute_advantage=True,
+            SACPolicy(
+                actor,
+                actor_optim,
+                critic1,
+                critic1_optim,
+                critic2,
+                critic2_optim,
+                gamma=0.99,
+                tau=0.005,
+                alpha=0.2,
+                estimation_step=NUM_AGENT,
                 action_space=env.action_space,
-                dual_clip=None,
-            )  # .to(device)
+                exploration_noise=GaussianNoise(),
+            )
         )
 
-    policy = MultiAgentPolicyManager(agents, env,
-                                     action_scaling=True, action_bound_method='clip')
+
+    policy = MultiAgentPolicyManager(agents, env)
     return policy, optim, env.agents
 
 
@@ -199,8 +155,8 @@ if __name__ == "__main__":
     # https://pettingzoo.farama.org/tutorials/tianshou/intermediate/
     # ======== Step 1: Environment setup =========
     # TODO: still don't quite get why we need dummy vectors
-    train_env = SubprocVectorEnv([get_env for _ in range(32)])
-    test_env = SubprocVectorEnv([get_env for _ in range(8)])
+    train_env = SubprocVectorEnv([get_env for _ in range(1)])
+    test_env = SubprocVectorEnv([get_env for _ in range(1)])
 
     # seed
     seed = 42
@@ -212,7 +168,7 @@ if __name__ == "__main__":
 
     # ======== Step 3: Collector setup =========
     buffer = VectorReplayBuffer(
-        500,
+        100000,
         buffer_num=len(train_env),
     )
 
@@ -222,6 +178,7 @@ if __name__ == "__main__":
         buffer,
         exploration_noise=True
     )
+    train_collector.collect(n_step=10000, random=True)
     test_collector = Collector(policy, test_env)
 
 
@@ -252,6 +209,9 @@ if __name__ == "__main__":
 
     def test_fn(epoch, env_step):
         return
+        # for agent in agents:
+        #     # policy.policies[agent].set_eps(0.1)
+        #     policy.policies[agent].set_eps(max(0.997 ** epoch, 0.1))
 
 
     def reward_metric(rews):
@@ -278,21 +238,20 @@ if __name__ == "__main__":
     # logger.load(writer)
 
     # ======== Step 5: Run the trainer =========
-    result = onpolicy_trainer(
+    result = offpolicy_trainer(
         policy=policy,
         train_collector=train_collector,
         test_collector=test_collector,
         max_epoch=2000,
         step_per_epoch=500,
-        # step_per_collect=4096,
-        episode_per_collect=32,
-        episode_per_test=4,
+        episode_per_test=1,
+        step_per_collect=32,
+        update_per_step=0.25,
         batch_size=64,
         train_fn=train_fn,
         test_fn=test_fn,
         stop_fn=stop_over_n(5),
         save_best_fn=save_best_fn,
-        repeat_per_collect=10,
         test_in_train=False,
         reward_metric=reward_metric,
         # logger=logger,

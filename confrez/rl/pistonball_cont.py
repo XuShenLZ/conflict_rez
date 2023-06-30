@@ -76,7 +76,7 @@ def get_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument('--n-step', type=int, default=100)
     parser.add_argument('--target-update-freq', type=int, default=320)
-    parser.add_argument('--epoch', type=int, default=5)
+    parser.add_argument('--epoch', type=int, default=20)
     parser.add_argument('--step-per-epoch', type=int, default=500)
     parser.add_argument('--step-per-collect', type=int, default=10)
     parser.add_argument('--episode-per-collect', type=int, default=16)

@@ -453,6 +453,7 @@ class parallel_env(ParallelEnv, EzPickle):
     def move(self, agent: str, action: np.ndarray):
         # speed and yaw rate
         v, w = action[0], action[1]
+        # print(f'v:{v}, w:{w}')
         input = ca.vertcat(v, w)
 
         state = ca.vertcat(
