@@ -1,5 +1,6 @@
 import casadi as ca
 from confrez.vehicle_types import VehicleBody
+import pymunk
 
 
 def kinematic_bicycle_ct(vehicle_body: VehicleBody):

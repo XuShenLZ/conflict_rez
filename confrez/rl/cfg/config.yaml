@@ -1,14 +1,14 @@
 task_name: 'pklot_unicycle'
 checkpoint: ''
-wandb_activate: True
+wandb_activate: False
 wandb_group: ''
 wandb_name: dqn
 wandb_entity: 'confrez'
 wandb_project: 'confrez-tianshou'
 
 num_agents: 1 # fixed
-num_train_envs: 16 # fixed
-num_test_envs: 8 # fixed
+num_train_envs: 1 # fixed
+num_test_envs: 1 # fixed
 max_cycles: 500 # fixed
 seed: 42 # fixed
 

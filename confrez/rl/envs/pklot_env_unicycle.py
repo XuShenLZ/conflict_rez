@@ -20,6 +20,8 @@ from confrez.pytypes import PythonMsg, VehicleState
 from confrez.vehicle_types import VehicleConfig, VehicleBody
 from confrez.dynamic_model import unicycle_simulator
 
+import pymunk
+import pymunk.pygame_util
 
 @dataclass
 class EnvParams(PythonMsg):
@@ -193,6 +195,9 @@ class parallel_env(ParallelEnv, EzPickle):
             {"front": (200, 255, 0), "back": (100, 128, 0)},
         ]
 
+        # PyMunk stuff
+        self.draw_options = pymunk.pygame_util.DrawOptions(self.canvas)
+        self.space = pymunk.Space()
         self.init_walls()
 
     def g2i(self, x: float, y: float) -> Tuple[int, int]:
@@ -206,6 +211,14 @@ class parallel_env(ParallelEnv, EzPickle):
         R = state.get_R()[:2, :2]
         car_outline = self.vb.xy @ R.T + np.array([state.x.x, state.x.y])
         self.vehicle_ps[agent] = Polygon(car_outline)
+        import pdb; pdb.set_trace()
+        vehicle = self.vehicles[int(agent[-1])]
+        vehicle.position = self.g2i(state.x.x, state.x.y)
+        vehicle.angle = state.e.psi
+        self.vehicle_pymunk_poly = pymunk.Poly.create_box(
+            vehicle, (self.vb.l, self.vb.w), radius=0.1
+        )
+        self.space.add(vehicle, self.vehicle_pymunk_poly)
 
     def init_vehicles(self):
         if self.random_reset:
@@ -216,7 +229,7 @@ class parallel_env(ParallelEnv, EzPickle):
         else:
             self.agents = self.possible_agents[:]
             configs = self.agent_configs[:]
-
+        self.vehicles = [pymunk.Body() for _ in range(self.n_vehicles)]
         self.states: Dict[str, VehicleState] = {
             agent: VehicleState() for agent in self.agents
         }
@@ -249,7 +262,7 @@ class parallel_env(ParallelEnv, EzPickle):
         initialize the rectangles for walls
         """
         self.walls: List[Polygon] = []
-
+        self.walls_pymunk_poly: List[pymunk.Poly] = [] 
         # =============== Static obstacles
         # Bottom left
         self.walls.append(
@@ -274,6 +287,18 @@ class parallel_env(ParallelEnv, EzPickle):
                 ]
             )
         )
+        self.walls_pymunk_poly.append(
+            pymunk.Poly(
+                self.space.static_body,
+                [
+                    self.g2i(1 * self.spot_width, 3 * self.spot_width),
+                    self.g2i(1 * self.spot_width, 5.5 * self.spot_width),
+                    self.g2i(5.5 * self.spot_width + self.vb.w / 2, 5.5 * self.spot_width),
+                    self.g2i(5.5 * self.spot_width + self.vb.w / 2, 3 * self.spot_width),
+                ],
+            )
+        )
+            
         # Bottom center
         self.walls.append(
             Polygon(
@@ -297,6 +322,19 @@ class parallel_env(ParallelEnv, EzPickle):
                 ]
             )
         )
+
+        self.walls_pymunk_poly.append(
+            pymunk.Poly(
+                self.space.static_body,
+                [
+                    self.g2i(7.5 * self.spot_width - self.vb.w / 2, 3 * self.spot_width),
+                    self.g2i(7.5 * self.spot_width - self.vb.w / 2, 5.5 * self.spot_width),
+                    self.g2i(7.5 * self.spot_width + self.vb.w / 2, 5.5 * self.spot_width),
+                    self.g2i(7.5 * self.spot_width + self.vb.w / 2, 3 * self.spot_width),
+                ],
+            )
+        )
+
         # Bottom right
         self.walls.append(
             Polygon(
@@ -318,6 +356,18 @@ class parallel_env(ParallelEnv, EzPickle):
                         3 * self.spot_width,
                     ],
                 ]
+            )
+        )
+
+        self.walls_pymunk_poly.append(
+            pymunk.Poly(
+                self.space.static_body,
+                [
+                    self.g2i(9.5 * self.spot_width - self.vb.w / 2, 3 * self.spot_width),
+                    self.g2i(9.5 * self.spot_width - self.vb.w / 2, 5.5 * self.spot_width),
+                    self.g2i(13 * self.spot_width, 5.5 * self.spot_width),
+                    self.g2i(13 * self.spot_width, 3 * self.spot_width),
+                ],
             )
         )
         # Top left
@@ -343,6 +393,18 @@ class parallel_env(ParallelEnv, EzPickle):
                 ]
             )
         )
+
+        self.walls_pymunk_poly.append(
+            pymunk.Poly(
+                self.space.static_body,
+                [
+                    self.g2i(1 * self.spot_width, 8.5 * self.spot_width),
+                    self.g2i(1 * self.spot_width, 11 * self.spot_width),
+                    self.g2i(5.5 * self.spot_width + self.vb.w / 2, 11 * self.spot_width),
+                    self.g2i(5.5 * self.spot_width + self.vb.w / 2, 8.5 * self.spot_width),
+                ],
+            )   
+        )
         # Top center
         self.walls.append(
             Polygon(
@@ -366,6 +428,19 @@ class parallel_env(ParallelEnv, EzPickle):
                 ]
             )
         )
+
+        self.walls_pymunk_poly.append(
+            pymunk.Poly(
+                self.space.static_body,
+                [
+                    self.g2i(7.5 * self.spot_width - self.vb.w / 2, 8.5 * self.spot_width),
+                    self.g2i(7.5 * self.spot_width - self.vb.w / 2, 11 * self.spot_width),
+                    self.g2i(8.5 * self.spot_width + self.vb.w / 2, 11 * self.spot_width),
+                    self.g2i(8.5 * self.spot_width + self.vb.w / 2, 8.5 * self.spot_width),
+                ],
+            )
+        )
+
         # Top right
         self.walls.append(
             Polygon(
@@ -390,6 +465,19 @@ class parallel_env(ParallelEnv, EzPickle):
             )
         )
 
+        self.walls_pymunk_poly.append(
+            pymunk.Poly(
+                self.space.static_body,
+                [
+                    self.g2i(10.5 * self.spot_width - self.vb.w / 2, 8.5 * self.spot_width),
+                    self.g2i(10.5 * self.spot_width - self.vb.w / 2, 11 * self.spot_width),
+                    self.g2i(13 * self.spot_width, 11 * self.spot_width),
+                    self.g2i(13 * self.spot_width, 8.5 * self.spot_width),
+                ],
+            )
+        )
+
+
         # =========== Boundaries
         # Up
         self.walls.append(
@@ -403,6 +491,19 @@ class parallel_env(ParallelEnv, EzPickle):
             )
         )
 
+        self.walls_pymunk_poly.append(
+            pymunk.Poly(
+                self.space.static_body,
+                [
+                    self.g2i(0, 11 * self.spot_width),
+                    self.g2i(0, 14 * self.spot_width),
+                    self.g2i(14 * self.spot_width, 14 * self.spot_width),
+                    self.g2i(14 * self.spot_width, 11 * self.spot_width),
+                ],
+            )
+        )
+
+
         # Down
         self.walls.append(
             Polygon(
@@ -415,6 +516,19 @@ class parallel_env(ParallelEnv, EzPickle):
             )
         )
 
+        self.walls_pymunk_poly.append(
+            pymunk.Poly(
+                self.space.static_body,
+                [
+                    self.g2i(0, 0),
+                    self.g2i(0, 3 * self.spot_width),
+                    self.g2i(14 * self.spot_width, 3 * self.spot_width),
+                    self.g2i(14 * self.spot_width, 0),
+                ],
+            )
+        )
+
+
         # Left
         self.walls.append(
             Polygon(
@@ -424,6 +538,18 @@ class parallel_env(ParallelEnv, EzPickle):
                     [1 * self.spot_width, 14 * self.spot_width],
                     [1 * self.spot_width, 0],
                 ]
+            )
+        )
+
+        self.walls_pymunk_poly.append(
+            pymunk.Poly(
+                self.space.static_body,
+                [
+                    self.g2i(0, 0),
+                    self.g2i(0, 14 * self.spot_width),
+                    self.g2i(1 * self.spot_width, 14 * self.spot_width),
+                    self.g2i(1 * self.spot_width, 0),
+                ],
             )
         )
 
@@ -438,6 +564,20 @@ class parallel_env(ParallelEnv, EzPickle):
                 ]
             )
         )
+
+        self.walls_pymunk_poly.append(
+            pymunk.Poly(
+                self.space.static_body,
+                [
+                    self.g2i(13 * self.spot_width, 0),
+                    self.g2i(13 * self.spot_width, 14 * self.spot_width),
+                    self.g2i(14 * self.spot_width, 14 * self.spot_width),
+                    self.g2i(14 * self.spot_width, 0),
+                ],
+            )
+        )
+
+        self.space.add(*self.walls_pymunk_poly)
 
     @functools.lru_cache(maxsize=None)
     def observation_space(self, agent):
@@ -470,6 +610,7 @@ class parallel_env(ParallelEnv, EzPickle):
         self.update_vehicle_polygon(agent=agent)
 
     def has_collision(self, agent: str) -> bool:
+        # TODO: 
         """
         check whether this agent collide with other agents or walls
         """
@@ -508,19 +649,6 @@ class parallel_env(ParallelEnv, EzPickle):
             return True
         else:
             return False
-
-    def draw_walls(self, surf: pygame.Surface = None):
-        if surf is None:
-            surf = self.canvas
-
-        surf.fill((0, 0, 0))
-        for p in self.walls:
-            x, y = p.exterior.coords.xy
-            px, py = self.g2i(np.array(x), np.array(y))
-
-            pygame.draw.polygon(
-                surface=surf, color=(0, 0, 255), points=np.vstack([px, py]).T
-            )
 
     def draw_car(
         self,
@@ -649,18 +777,17 @@ class parallel_env(ParallelEnv, EzPickle):
             self.enable_render()
 
         surf = self.canvas.copy()
-
         # Draw agents
         for agent in self.agents:
             self.draw_goal(
                 agent, color=self._colors[self.agent_name_mapping[agent]], surf=surf
             )
 
-        for agent in self.agents:
-            self.draw_car(
-                agent, color=self._colors[self.agent_name_mapping[agent]], surf=surf
-            )
-
+        # for agent in self.agents:
+        #     self.draw_car(
+        #         agent, color=self._colors[self.agent_name_mapping[agent]], surf=surf
+        #     )
+        self.space.debug_draw(pymunk.pygame_util.DrawOptions(surf))
         # Attach canvas on to the screen
         self.screen.blit(surf, (0, 0))
 
@@ -670,6 +797,32 @@ class parallel_env(ParallelEnv, EzPickle):
             screenshot = np.array(pygame.surfarray.pixels3d(self.screen))
 
             return np.transpose(screenshot, axes=(1, 0, 2))
+        
+    def play(self):
+        # Play the unicycle game
+        # Only controlling vehicle 0
+        self.enable_render()
+        clock = pygame.time.Clock()
+        while True:
+            clock.tick(60)
+            self.space.step(1/60)
+            self.render()
+            pygame.event.pump()
+            keys = pygame.key.get_pressed()
+            if keys[pygame.K_UP]:
+                self.move(agent='vehicle_0', action=0)
+            elif keys[pygame.K_DOWN]:
+                self.move(agent='vehicle_0', action=1)
+            elif keys[pygame.K_LEFT]:
+                self.move(agent='vehicle_0', action=2)
+            elif keys[pygame.K_RIGHT]:
+                self.move(agent='vehicle_0', action=3)
+            elif keys[pygame.K_SPACE]:
+                self.move(agent='vehicle_0', action=4)
+            elif keys[pygame.K_ESCAPE]:
+                break
+        self.close()
+
 
     def close(self):
         if not self.closed:
@@ -691,8 +844,6 @@ class parallel_env(ParallelEnv, EzPickle):
 
         self.init_walls()
         self.init_vehicles()
-
-        self.draw_walls()
 
         observations = {agent: self.observe(agent) for agent in self.agents}
 
