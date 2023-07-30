@@ -31,7 +31,6 @@ test_save_obs(aec_env())
 env = parallel_env(n_vehicles=4)
 
 observations = env.reset(seed=0)
-env.render()
 
 max_cycles = 500
 

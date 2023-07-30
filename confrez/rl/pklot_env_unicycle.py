@@ -681,7 +681,7 @@ class parallel_env(ParallelEnv, EzPickle):
                 pygame.display.quit()
 
     def reset(
-        self, seed=None, return_info=False, options=None
+        self, seed=None, return_info=True, options=None
     ) -> Dict[str, np.ndarray]:
         if seed is not None:
             self.seed(seed)
@@ -770,6 +770,7 @@ class parallel_env(ParallelEnv, EzPickle):
         # If it reaches the cycle limit, mark all active agents as done
         if self.cycle_done:
             truncations = {agent: True for agent in self.agents}
+            terminations = {agent: True for agent in self.agents}
             self.agents = []
 
         return observations, rewards, terminations, truncations, infos

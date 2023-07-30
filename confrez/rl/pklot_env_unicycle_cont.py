@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 import functools
 from itertools import product
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Set, Tuple, Union
 import random
 import casadi as ca
 from shapely.geometry import Polygon
@@ -36,6 +36,7 @@ class EnvParams(PythonMsg):
     speed_res: float = field(default=0.1)
 
     dt: float = field(default=0.1)
+    eps: float = field(default=1)
 
     goal_r: float = field(default=0.5)
     goal_y: float = field(default=np.pi / 6)
@@ -45,6 +46,7 @@ class EnvParams(PythonMsg):
     reward_collision: float = field(default=-1e3)
     reward_dist: float = field(default=-1)
     reward_goal: float = field(default=1e4)
+    reward_heading: float = field(default=-1)
 
     def __post_init__(self):
         self.region = GeofenceRegion(
@@ -78,7 +80,7 @@ def raw_env(**kwargs):
 
 
 class parallel_env(ParallelEnv, EzPickle):
-    metadata = {"render_modes": ["human", "rgb_array"], "name": "pklot", "is_parallelizable": True,}
+    metadata = {"render.modes": ["human", "rgb_array"], "name": "pklot", "is_parallelizable": True,}
 
     def __init__(
         self,
@@ -90,6 +92,7 @@ class parallel_env(ParallelEnv, EzPickle):
         params=EnvParams(),
     ):
         EzPickle.__init__(self, n_vehicles, max_cycles)
+        ParallelEnv.__init__(self)
         self.render_mode = render_mode
         self.n_vehicles = n_vehicles
 
@@ -489,6 +492,13 @@ class parallel_env(ParallelEnv, EzPickle):
 
         return np.linalg.norm([state.x.x - goal.x.x, state.x.y - goal.x.y])
 
+    def dist_heading(self, agent: str) -> float:
+        state = self.states[agent]
+        goal = self.goals[agent]
+
+        return np.pi - np.abs((state.e.psi - goal.e.psi) % (2 * np.pi) - np.pi)
+        #  np.abs(state.e.psi % (2 * np.pi) - goal.e.psi % (2 * np.pi))
+
     def reach_goal(self, agent: str) -> bool:
         """
         check whether this agent has reached its goal
@@ -498,8 +508,7 @@ class parallel_env(ParallelEnv, EzPickle):
 
         if (
             self.dist2goal(agent=agent) <= self.params.goal_r
-            and np.abs(state.e.psi % (2 * np.pi) - goal.e.psi % (2 * np.pi))
-            <= self.params.goal_y
+            and self.dist_heading(agent) <= self.params.goal_y
         ):
             return True
         else:
@@ -636,7 +645,7 @@ class parallel_env(ParallelEnv, EzPickle):
 
         self.renderOn = True
 
-    def render(self):
+    def render(self, mode='human'):
         """
         Renders the environment
         """
@@ -662,7 +671,8 @@ class parallel_env(ParallelEnv, EzPickle):
 
         if self.render_mode == "human":
             pygame.display.flip()
-        elif self.render_mode == "rgb_array":
+            return True
+        elif self.render_mode == "rgb_array" or mode == 'rgb':
             screenshot = np.array(pygame.surfarray.pixels3d(self.screen))
 
             return np.transpose(screenshot, axes=(1, 0, 2))
@@ -678,7 +688,7 @@ class parallel_env(ParallelEnv, EzPickle):
 
     def reset(
         self, seed=None, return_info=True, options=None
-    ) -> Dict[str, np.ndarray]:
+    ):
         if seed is not None:
             self.seed(seed)
 
@@ -713,6 +723,7 @@ class parallel_env(ParallelEnv, EzPickle):
         """
         step the entire environment forward
         """
+        # self.render()
         if len(self.agents) == 0:
             pass
 
@@ -754,6 +765,11 @@ class parallel_env(ParallelEnv, EzPickle):
             for agent in self.agents:
                 # The further the vehicle is away from the goal, the larger the penalty
                 rewards[agent] += self.params.reward_dist * self.dist2goal(agent)
+
+                # Tries to align the vehicle with the goal, the closer it is to the goal the more the alignment matters
+                # rewards[agent] += self.params.reward_heading / (
+                #         self.dist2goal(agent) + self.params.eps) * self.dist_heading(agent)
+                rewards[agent] += self.params.reward_heading * self.dist_heading(agent)
 
                 infos[agent]["states"] = self.states[agent].copy()
 
