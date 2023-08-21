@@ -15,8 +15,8 @@ from pettingzoo.butterfly import pistonball_v6
 
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 
-checkpoint_path = os.path.expanduser('ray_results/pk_lot/PPO/PPO_pk_lot_dbc48_00000_0_2023-07-28_23-48-00/'
-                                     'checkpoint_000400')
+checkpoint_path = os.path.expanduser('ray_results/pk_lot/PPO-2/PPO_pk_lot_45299_00000_0_2023-08-08_03-42-28/'
+                                     'checkpoint_000770')
 
 
 def get_env(render=False):
@@ -38,12 +38,12 @@ register_env(env_name, lambda config: PettingZooEnv(get_env()))
 
 ray.init()
 
-PPOagent = PPO.from_checkpoint(checkpoint_path)
+PPO_agent = PPO.from_checkpoint(checkpoint_path)
 
 reward_sum = 0
 frame_list = []
 i = 0
-state = [np.zeros([256], np.float32) for _ in range(2)]
+state = {agent_id: [np.zeros([256], np.float32) for _ in range(2)] for agent_id in env.possible_agents}
 actions = {}
 env.reset()
 
@@ -52,7 +52,7 @@ for agent in env.agent_iter():
     if termination or truncation:
         action = None
     else:
-        action, state, _ = PPOagent.compute_single_action(observation, state)
+        action, state[agent], _ = PPO_agent.compute_single_action(observation, state[agent], policy_id=agent)
 
     env.step(action)
 

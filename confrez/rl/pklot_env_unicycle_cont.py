@@ -699,7 +699,7 @@ class parallel_env(ParallelEnv, EzPickle):
         self.init_vehicles()
 
         self.draw_walls()
-        self.agents = self.possible_agents[:]
+        # self.agents = self.possible_agents[:]
 
         observations = {agent: self.observe(agent) for agent in self.agents}
 

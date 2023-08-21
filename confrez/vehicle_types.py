@@ -33,8 +33,8 @@ class VehicleBody(BasePolytopeObstacle):
 
     def __post_init__(self):
         self.offset = self.wb / 2
-        self.lf = self.wb + self.hf
-        self.lr = self.hr
+        self.lf = self.wb / 2 + self.hf
+        self.lr = self.wb / 2 + self.hr
         self.l = self.lf + self.lr
 
         self.cf = 2.45
