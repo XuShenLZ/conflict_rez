@@ -207,7 +207,7 @@ class parallel_env(ParallelEnv, EzPickle):
 
     def init_vehicles(self):
         if self.random_reset:
-            n_vehicles = random.choice(range(1, self.n_vehicles + 1))
+            n_vehicles = self.n_vehicles #random.choice(range(1, self.n_vehicles + 1))
             self.agents = sorted(random.sample(self.possible_agents, n_vehicles))
 
             configs = random.sample(self.agent_configs, n_vehicles)
@@ -723,10 +723,6 @@ class parallel_env(ParallelEnv, EzPickle):
         """
         step the entire environment forward
         """
-        # self.render()
-        if len(self.agents) == 0:
-            pass
-
         if not actions:
             self.agents = []
             return {}, {}, {}, {}, {}
@@ -765,11 +761,6 @@ class parallel_env(ParallelEnv, EzPickle):
             for agent in self.agents:
                 # The further the vehicle is away from the goal, the larger the penalty
                 rewards[agent] += self.params.reward_dist * self.dist2goal(agent)
-
-                # Tries to align the vehicle with the goal, the closer it is to the goal the more the alignment matters
-                # rewards[agent] += self.params.reward_heading / (
-                #         self.dist2goal(agent) + self.params.eps) * self.dist_heading(agent)
-                rewards[agent] += self.params.reward_heading * self.dist_heading(agent)
 
                 infos[agent]["states"] = self.states[agent].copy()
 
