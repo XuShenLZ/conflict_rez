@@ -92,9 +92,9 @@ if __name__ == "__main__":
     register_env("pk_lot", lambda config: ParallelPettingZooEnv(get_env()))
     env_name = "pk_lot"
     env = get_env()
-    rollout_workers = 16
+    rollout_workers = 10
     rollout_length = 200
-    num_envs_per = 2
+    num_envs_per = 3
 
     batch_size = rollout_workers * rollout_length * num_envs_per
     mini_batch = 4
