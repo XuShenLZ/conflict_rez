@@ -101,7 +101,7 @@ if __name__ == "__main__":
 
     config = (
         PPOConfig()
-        .environment(env="pk_lot", clip_actions=True)  # , env_task_fn=curriculum_fn)
+        .environment(env="pk_lot")  # , env_task_fn=curriculum_fn)
         .rollouts(num_rollout_workers=rollout_workers, rollout_fragment_length=rollout_length,
                   num_envs_per_worker=num_envs_per, observation_filter="MeanStdFilter")
         .training(
@@ -116,7 +116,7 @@ if __name__ == "__main__":
             grad_clip=15,
             entropy_coeff=1e-3,
             vf_loss_coeff=0.2,
-            vf_clip_param=10,
+            vf_clip_param=5,
             sgd_minibatch_size=batch_size // mini_batch,
             num_sgd_iter=10,
             model={"dim": 84, "use_lstm": True, "framestack": False, "fcnet_hiddens": [512, 512],

@@ -111,7 +111,7 @@ if __name__ == "__main__":
 
     config = (
         PPOConfig()
-        .environment(env="pk_lot", clip_actions=True)  # , env_task_fn=curriculum_fn)
+        .environment(env="pk_lot")  # , env_task_fn=curriculum_fn)
         .rollouts(num_rollout_workers=rollout_workers, rollout_fragment_length=rollout_length,
                   num_envs_per_worker=num_envs_per, observation_filter="MeanStdFilter")
         .training(
