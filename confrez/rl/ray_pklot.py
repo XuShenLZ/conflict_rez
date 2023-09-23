@@ -3,7 +3,7 @@ from abc import ABC
 from ray.rllib.models import ModelCatalog
 from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
 from ray.tune.registry import register_env
-from ray.rllib.env import ParallelPettingZooEnv, MultiAgentEnv
+from ray.rllib.env import ParallelPettingZooEnv, MultiAgentEnv, PettingZooEnv
 from ray.rllib.env.apis.task_settable_env import TaskSettableEnv, TaskType
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.algorithms.a2c import A2CConfig
@@ -32,36 +32,9 @@ import random
 from typing import Dict, Tuple, List
 from torch import nn
 
-n_agents = 2
+n_agents = 4
 random_reset = False
-max_cycles = 200
-
-
-class CNNModelV2(TorchModelV2, nn.Module):
-    def __init__(self, obs_space, act_space, num_outputs, *args, **kwargs):
-        TorchModelV2.__init__(self, obs_space, act_space, num_outputs, *args, **kwargs)
-        nn.Module.__init__(self)
-        self.model = nn.Sequential(
-            nn.Conv2d(12, 32, [8, 8], stride=(4, 4)),
-            nn.ReLU(),
-            nn.Conv2d(32, 64, [4, 4], stride=(2, 2)),
-            nn.ReLU(),
-            nn.Conv2d(64, 64, [3, 3], stride=(1, 1)),
-            nn.ReLU(),
-            nn.Flatten(),
-            (nn.Linear(3136, 512)),
-            nn.ReLU(),
-        )
-        self.policy_fn = nn.Linear(512, num_outputs)
-        self.value_fn = nn.Linear(512, 1)
-
-    def forward(self, input_dict, state, seq_lens):
-        model_out = self.model(input_dict["obs"].permute(0, 3, 1, 2))
-        self._value_out = self.value_fn(model_out)
-        return self.policy_fn(model_out), state
-
-    def value_function(self):
-        return self._value_out.flatten()
+max_cycles = 300
 
 
 def get_env(render=False):
@@ -77,9 +50,9 @@ def get_env(render=False):
     # env = ss.frame_skip_v0(env, num_frames=1)
     # env = ss.color_reduction_v0(env)
     # env = ss.frame_stack_v2(env)
-    env = ss.black_death_v3(env)
-    env = ss.clip_actions_v0(env)
-    env = ss.resize_v1(env, 84, 84)
+    #env = ss.black_death_v3(env)
+    #env = ss.clip_actions_v0(env)
+    #env = ss.resize_v1(env, 84, 84)
 
     return env
 
@@ -93,106 +66,47 @@ if __name__ == "__main__":
     env_name = "pk_lot"
     env = get_env()
     rollout_workers = 10
-    rollout_length = 200
+    rollout_length = max_cycles
     num_envs_per = 3
 
     batch_size = rollout_workers * rollout_length * num_envs_per
-    mini_batch = 4
+    mini_batch = 8
 
     config = (
-        PPOConfig()
-        .environment(env="pk_lot")  # , env_task_fn=curriculum_fn)
+        PPOConfig()  # Version 2.5.0
+        .environment(env="pk_lot", disable_env_checking=True)  # , env_task_fn=curriculum_fn
         .rollouts(num_rollout_workers=rollout_workers, rollout_fragment_length=rollout_length,
                   num_envs_per_worker=num_envs_per, observation_filter="MeanStdFilter")
         .training(
             train_batch_size=batch_size,
             lr=5e-4,
-            kl_coeff=1,
-            kl_target=1e-3,
+            kl_coeff=0.2,
+            kl_target=2e-3,
             gamma=0.99,
             lambda_=0.95,
             use_gae=True,
             clip_param=0.3,
-            grad_clip=15,
+            grad_clip=10,
             entropy_coeff=1e-3,
-            vf_loss_coeff=0.2,
-            vf_clip_param=5,
-            sgd_minibatch_size=batch_size // mini_batch,
-            num_sgd_iter=10,
-            model={"dim": 84, "use_lstm": True, "framestack": False, "fcnet_hiddens": [512, 512],
-                   "vf_share_layers": False, "free_log_std": True, "fcnet_activation": "relu"},
+            vf_loss_coeff=0.02,  # 0.05
+            vf_clip_param=10,  # 10 (2 vehicle)
+            sgd_minibatch_size=1024,
+            num_sgd_iter=20,
+            model={"dim": 84, "use_lstm": False, "framestack": True, #"post_fcnet_hiddens": [512, 512],
+                   "vf_share_layers": True, "free_log_std": False},
         )
         .debugging(log_level="INFO")
         .framework(framework="torch")
         .resources(num_gpus=1)
         .multi_agent(
-            policies={"shared_policy"},
-            policy_mapping_fn=(lambda agent_id, episode, worker, **kwargs: "shared_policy")
+            policies=env.possible_agents, #{"shared_policy"},
+            policy_mapping_fn=(lambda agent_id, episode, worker, **kwargs: agent_id)#"shared_policy")
         )
     )
 
-    # config = (
-    #     A2CConfig()
-    #     .environment(env="pk_lot", clip_actions=True)  # , env_task_fn=curriculum_fn)
-    #     .rollouts(num_rollout_workers=rollout_workers, rollout_fragment_length=rollout_length,
-    #               num_envs_per_worker=num_envs_per, observation_filter="MeanStdFilter")
-    #     .training(
-    #         train_batch_size=batch_size,
-    #         grad_clip=30,
-    #         model={"dim": 84, "use_lstm": True, "framestack": True, "fcnet_activation": "relu"},
-    #     )
-    #     .debugging(log_level="INFO")
-    #     .framework(framework="torch")
-    #     .resources(num_gpus=1)
-    #     .multi_agent(
-    #         policies=env.possible_agents,
-    #         policy_mapping_fn=(lambda agent_id, *args, **kwargs: agent_id)
-    #     )
-    # )
-
-    # config = (
-    #     SACConfig()
-    #     .environment(env="pk_lot", normalize_actions=True)
-    #     .rollouts(num_rollout_workers=rollout_workers, rollout_fragment_length=rollout_length,
-    #               num_envs_per_worker=num_envs_per, observation_filter="MeanStdFilter")
-    #     .training(
-    #         train_batch_size=batch_size,
-    #         # grad_clip=5,
-    #         n_step=3,
-    #         num_steps_sampled_before_learning_starts=10000,
-    #         optimization_config={
-    #             "actor_learning_rate": 3e-4,
-    #             "critic_learning_rate": 3e-5,
-    #             "entropy_learning_rate": 3e-4,
-    #         },
-    #         replay_buffer_config={
-    #             "_enable_replay_buffer_api": True,
-    #             "type": "MultiAgentPrioritizedReplayBuffer",
-    #             "capacity": int(5e5),
-    #             "prioritized_replay": False,
-    #             "prioritized_replay_alpha": 0.6,
-    #             "prioritized_replay_beta": 0.4,
-    #             "prioritized_replay_eps": 1e-6,
-    #             "worker_side_prioritization": False,
-    #         },
-    #         target_network_update_freq=1
-    #     )
-    #     .debugging(log_level="INFO")
-    #     .framework(framework="torch")
-    #     .resources(num_gpus=1)
-    #     .multi_agent(
-    #         policies=env.possible_agents,
-    #         policy_mapping_fn=(lambda agent_id, *args, **kwargs: agent_id)
-    #     )
-    #     .reporting(
-    #         min_sample_timesteps_per_iteration=1000,
-    #         metrics_num_episodes_for_smoothing=5
-    #     )
-    # )
-
     results = tune.run(
         "PPO",
-        name=f"PPO-{n_agents}-rand{random_reset}-m_cycles{max_cycles}",
+        name=f"PPO-{n_agents}-rand{random_reset}-m_cycles{max_cycles}",# + "/PPO_pk_lot_28df8_00000_0_2023-09-11_14-50-01",
         verbose=0,
         metric="episode_reward_mean",
         mode="max",
@@ -200,5 +114,6 @@ if __name__ == "__main__":
         checkpoint_freq=10,
         local_dir="ray_results/" + env_name,
         config=config.to_dict(),
-        callbacks=[WandbLoggerCallback(project="confrez-ray")],
+        max_failures=0,
+        callbacks=[WandbLoggerCallback(project="confrez-ray", entity="confrez")],
     )

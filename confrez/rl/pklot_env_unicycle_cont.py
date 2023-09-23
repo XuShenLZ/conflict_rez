@@ -30,7 +30,7 @@ class EnvParams(PythonMsg):
 
     spot_width: float = field(default=2.5)
     region: GeofenceRegion = field(default=None)
-    window_size: int = field(default=280)
+    window_size: int = field(default=84)
 
     dyaw_res: float = field(default=0.1)
     speed_res: float = field(default=0.1)
@@ -89,10 +89,12 @@ class parallel_env(ParallelEnv, EzPickle):
         seed=None,
         random_reset=False,
         render_mode="human",
+        resize=None,
         params=EnvParams(),
     ):
         EzPickle.__init__(self, n_vehicles, max_cycles)
         ParallelEnv.__init__(self)
+        self.resize = resize
         self.render_mode = render_mode
         self.n_vehicles = n_vehicles
 
@@ -123,7 +125,7 @@ class parallel_env(ParallelEnv, EzPickle):
                     Box(
                         low=0,
                         high=255,
-                        shape=(self.window_size, self.window_size, 3),
+                        shape=(self.window_size, self.window_size, 3) if self.resize is None else self.resize + (3,),
                         dtype=np.uint8,
                     )
                 ]
