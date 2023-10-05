@@ -34,7 +34,7 @@ import random
 from typing import Dict, Tuple, List
 from torch import nn
 
-n_agents = 2
+n_agents = 4
 random_reset = False
 max_cycles = 200
 
@@ -50,21 +50,21 @@ def explore(config):
 
 
 hyperparam_mutations = {
+    "gamma": [0.9, 0.99],
+    "lambda_":[0.95, 0.995],
     "clip_param": lambda: random.uniform(0.01, 0.5),
     "lr": [1e-3, 5e-4, 1e-4, 5e-5, 1e-5],
-    "kl_target": [0, 1e-5, 1e-4, 1e-3],
+    "kl_target": [1e-5, 1e-4, 1e-3, 1e-2],
+    "kl_coeff": [0, 0.2, 1, 3],
     "num_sgd_iter": lambda: random.randint(1, 30),
-    "vf_clip_param": lambda: random.randint(2, 32),
-    "vf_loss_coeff": lambda: random.uniform(0.1, 4),
-    "entropy_coeff": [0, 1e-3, 1e-4]
-    # "model": {"use_lstm": [True, False], "framestack": [True, False],
-    #           "fcnet_hiddens": [[256, 256], [512, 512]], "free_log_std": [True, False],
-    #           "fcnet_activation": ["relu", "tanh"]},
+    "vf_clip_param": lambda: random.randint(2, 64),
+    "vf_loss_coeff": lambda: random.uniform(0.001, 4),
+    "entropy_coeff": [0, 1e-3, 1e-4, 1e-5]
 }
 
 pbt = PopulationBasedTraining(
     time_attr="time_total_s",
-    perturbation_interval=600,
+    perturbation_interval=1200,
     resample_probability=0.25,
     # Specifies the mutations of these hyperparams
     hyperparam_mutations=hyperparam_mutations,
@@ -75,7 +75,7 @@ pbt = PopulationBasedTraining(
 def get_env(render=False):
     """This function is needed to provide callables for DummyVectorEnv."""
     env_config = pklot_env_cont.EnvParams(
-        reward_stop=-5, reward_dist=-0.1, reward_heading=-0.5, reward_time=0, reward_collision=-10, reward_goal=100,
+        reward_stop=-1, reward_dist=-0.1, reward_heading=-0.1, reward_time=-0.1, reward_collision=-10, reward_goal=100,
         # eps=1e-3
     )
     env = pklot_env_cont.parallel_env(n_vehicles=n_agents, random_reset=random_reset, render_mode="rgb_array",
@@ -85,7 +85,7 @@ def get_env(render=False):
     # env = ss.frame_skip_v0(env, num_frames=1)
     # env = ss.color_reduction_v0(env)
     # env = ss.frame_stack_v2(env)
-    # env = ss.black_death_v3(env)
+    env = ss.black_death_v3(env)
     env = ss.clip_actions_v0(env)
     env = ss.resize_v1(env, 84, 84)
 
@@ -100,11 +100,11 @@ if __name__ == "__main__":
     register_env("pk_lot", lambda config: ParallelPettingZooEnv(get_env()))
     env_name = "pk_lot"
     env = get_env()
-    num_samples = 4
-    rollout_workers = 3
-    rollout_length = 200
-    num_envs_per = 4
-    num_gpus = 0.8 / num_samples
+    num_samples = 3
+    rollout_workers = 1
+    rollout_length = max_cycles
+    num_envs_per = 8
+    num_gpus = 0.6 / num_samples
 
     batch_size = rollout_workers * rollout_length * num_envs_per
     mini_batch = 4
@@ -117,20 +117,19 @@ if __name__ == "__main__":
         .training(
             train_batch_size=batch_size,
             lr=tune.choice([1e-3, 5e-4, 1e-4, 5e-5, 1e-5]),
-            kl_coeff=1,
-            kl_target=tune.choice([0, 1e-4, 1e-3]),
-            gamma=0.99,
-            lambda_=0.95,
-            use_gae=True,
-            clip_param=0.4,
-            grad_clip=tune.choice([5, 10, 15]),
+            kl_coeff=tune.choice([0.2, 1]),
+            kl_target=tune.choice([1e-4, 1e-3]),
+            gamma=tune.choice([0.9, 0.99]),
+            lambda_=tune.choice([0.95, 0.995]),
+            clip_param=tune.choice([0.2, 0.3, 0.4]),
+            grad_clip=tune.choice([5, 10, 15, 20]),
             entropy_coeff=tune.choice([0, 1e-3, 1e-4]),
-            vf_loss_coeff=0.2,
-            vf_clip_param=5,
+            vf_loss_coeff=tune.choice([1, 0.5, 0.1, 0.05, 0.01]),
+            vf_clip_param=tune.choice([10, 20, 32, 64]),
             sgd_minibatch_size=batch_size // mini_batch,
-            num_sgd_iter=10,
-            model={"dim": 84, "use_lstm": True, "framestack": False, "fcnet_hiddens": [512, 512],
-                   "vf_share_layers": False, "free_log_std": True, "fcnet_activation": "relu"},
+            num_sgd_iter=tune.choice([10, 15, 20]),
+            model={"dim": 84, "use_lstm": False, "framestack": True, 
+                   "vf_share_layers": False, "free_log_std": False},
         )
         .debugging(log_level="INFO")
         .framework(framework="torch")
@@ -152,10 +151,13 @@ if __name__ == "__main__":
         ),
         run_config=air.RunConfig(
             name=f"PPO-{n_agents}-rand{random_reset}-m_cycles{max_cycles}-tuner",
-            stop={"episode_reward_mean": 20, "timesteps_total": 8000000},
+            stop={"episode_reward_mean": 20, "timesteps_total": 20_000_000},
             local_dir="ray_results/" + env_name,
             callbacks=[WandbLoggerCallback(project="confrez-ray", log_config=True)],
-            verbose=2,
+            verbose=0,
+            failure_config=air.FailureConfig(
+                max_failures=-1,
+            )
         ),
         param_space=config.to_dict(),
         # resume=True

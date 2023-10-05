@@ -86,14 +86,14 @@ if __name__ == "__main__":
             lambda_=0.95,
             use_gae=True,
             clip_param=0.3,
-            grad_clip=10,
+            grad_clip=20,
             entropy_coeff=1e-3,
-            vf_loss_coeff=0.02,  # 0.05
-            vf_clip_param=10,  # 10 (2 vehicle)
+            vf_loss_coeff=0.1,  # 0.05
+            vf_clip_param=32,  # 10 (2 vehicle)
             sgd_minibatch_size=1024,
             num_sgd_iter=20,
             model={"dim": 84, "use_lstm": False, "framestack": True, #"post_fcnet_hiddens": [512, 512],
-                   "vf_share_layers": True, "free_log_std": False},
+                   "vf_share_layers": False, "free_log_std": False},
         )
         .debugging(log_level="INFO")
         .framework(framework="torch")
@@ -114,6 +114,6 @@ if __name__ == "__main__":
         checkpoint_freq=10,
         local_dir="ray_results/" + env_name,
         config=config.to_dict(),
-        max_failures=0,
+        max_failures=-1,
         callbacks=[WandbLoggerCallback(project="confrez-ray", entity="confrez")],
     )
