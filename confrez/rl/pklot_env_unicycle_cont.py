@@ -194,6 +194,7 @@ class parallel_env(ParallelEnv, EzPickle):
         ]
 
         self.init_walls()
+        self.collisions = {agent_id: False for agent_id in self.possible_agents}
 
     def g2i(self, x: float, y: float) -> Tuple[float, float]:
         """
@@ -742,6 +743,10 @@ class parallel_env(ParallelEnv, EzPickle):
             # Move agents with actions simultaneously
             for agent in self.agents:
                 self.move(agent=agent, action=actions[agent])
+                if self.has_collision(agent):
+                    # print("colliding")
+                    self.collisions[agent] = True
+                    self.move(agent=agent, action=-actions[agent])
 
             # Check collision or goal completion and apply costs
             for agent in self.agents:
@@ -752,9 +757,10 @@ class parallel_env(ParallelEnv, EzPickle):
                     # If the vehicle remain stationary, it will get a small penalty
                     rewards[agent] += self.params.reward_stop
 
-                if self.has_collision(agent):
+                if self.collisions[agent]:  # self.has_collision(agent):
                     # If collide with other agents or walls, apply huge penalty
                     rewards[agent] += self.params.reward_collision
+                    self.collisions[agent] = False
                 elif self.reach_goal(agent):
                     # If reach the goal without collision, the agent will be done and get huge reward
                     terminations[agent] = True

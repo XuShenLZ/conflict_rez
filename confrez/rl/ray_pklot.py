@@ -6,9 +6,6 @@ from ray.tune.registry import register_env
 from ray.rllib.env import ParallelPettingZooEnv, MultiAgentEnv, PettingZooEnv
 from ray.rllib.env.apis.task_settable_env import TaskSettableEnv, TaskType
 from ray.rllib.algorithms.ppo import PPOConfig
-from ray.rllib.algorithms.a2c import A2CConfig
-from ray.rllib.algorithms.td3 import TD3Config
-from ray.rllib.algorithms.sac import SACConfig
 from ray.tune.logger import pretty_print
 from ray.rllib.algorithms.sac.sac_torch_policy import SACTorchPolicy
 from ray.rllib.algorithms.sac.sac_torch_model import SACTorchModel
@@ -34,25 +31,17 @@ from torch import nn
 
 n_agents = 4
 random_reset = False
-max_cycles = 300
+max_cycles = 400
 
 
 def get_env(render=False):
     """This function is needed to provide callables for DummyVectorEnv."""
     env_config = pklot_env_cont.EnvParams(
-        reward_stop=-1, reward_dist=-0.1, reward_heading=-0.1, reward_time=-0.1, reward_collision=-10, reward_goal=100,
-        # eps=1e-3
+        reward_stop=-1, reward_dist=-0.1, reward_heading=-0.1, reward_time=-0.1, reward_collision=-1, reward_goal=100,
+        window_size=140
     )
     env = pklot_env_cont.parallel_env(n_vehicles=n_agents, random_reset=random_reset, render_mode="rgb_array",
                                       params=env_config, max_cycles=max_cycles)
-
-    # env = ss.sticky_actions_v0(env, repeat_action_probability=0.05)
-    # env = ss.frame_skip_v0(env, num_frames=1)
-    # env = ss.color_reduction_v0(env)
-    # env = ss.frame_stack_v2(env)
-    #env = ss.black_death_v3(env)
-    #env = ss.clip_actions_v0(env)
-    #env = ss.resize_v1(env, 84, 84)
 
     return env
 
@@ -65,35 +54,36 @@ if __name__ == "__main__":
     register_env("pk_lot", lambda config: ParallelPettingZooEnv(get_env()))
     env_name = "pk_lot"
     env = get_env()
-    rollout_workers = 10
-    rollout_length = max_cycles
-    num_envs_per = 3
+    rollout_workers = 28
+    rollout_length = 400
+    num_envs_per = 1
 
     batch_size = rollout_workers * rollout_length * num_envs_per
     mini_batch = 8
 
     config = (
         PPOConfig()  # Version 2.5.0
-        .environment(env="pk_lot", disable_env_checking=True)  # , env_task_fn=curriculum_fn
+        .environment(env="pk_lot", disable_env_checking=True, render_env=True)  # , env_task_fn=curriculum_fn
         .rollouts(num_rollout_workers=rollout_workers, rollout_fragment_length=rollout_length,
                   num_envs_per_worker=num_envs_per, observation_filter="MeanStdFilter")
         .training(
             train_batch_size=batch_size,
             lr=5e-4,
             kl_coeff=0.2,
-            kl_target=2e-3,
+            kl_target=1e-3,
             gamma=0.99,
-            lambda_=0.95,
+            lambda_=0.98,
             use_gae=True,
             clip_param=0.3,
             grad_clip=20,
-            entropy_coeff=1e-3,
-            vf_loss_coeff=0.1,  # 0.05
-            vf_clip_param=32,  # 10 (2 vehicle)
-            sgd_minibatch_size=1024,
+            entropy_coeff=1e-2,
+            vf_loss_coeff=0.05,  # 0.05
+            vf_clip_param=10,  # 10 (2 vehicle)
+            sgd_minibatch_size=512,
             num_sgd_iter=20,
-            model={"dim": 84, "use_lstm": False, "framestack": True, #"post_fcnet_hiddens": [512, 512],
-                   "vf_share_layers": False, "free_log_std": False},
+            model={"dim": 140, "use_lstm": False, "framestack": True, #"post_fcnet_hiddens": [512, 512],
+                   "vf_share_layers": True, "free_log_std": False,
+                   "conv_filters": [[16, [16, 16], 4], [32, [4, 4], 2], [64, [4, 4], 2], [512, [9, 9], 1]]},
         )
         .debugging(log_level="INFO")
         .framework(framework="torch")

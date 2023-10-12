@@ -14,20 +14,17 @@ import pklot_env_unicycle_cont as pklot_env_cont
 
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 
-checkpoint_path = os.path.expanduser("ray_results/pk_lot/PPO-2-randFalse-m_cycles300"
-                                     "/PPO_pk_lot_f1f50_00000_0_2023-09-02_02-49-01/checkpoint_000880")
+checkpoint_path = os.path.expanduser("ray_results/pk_lot/PPO-4-randFalse-m_cycles400/"
+                                     "PPO_pk_lot_d6de6_00000_0_2023-10-09_00-17-00/checkpoint_000250")
 
 
 def get_env(render=False):
     """This function is needed to provide callables for DummyVectorEnv."""
     env_config = pklot_env_cont.EnvParams(
-        reward_stop=-1, reward_dist=-0.1, reward_time=-0.1, reward_heading=-0.1, reward_collision=-10, reward_goal=100, window_size=280
+        reward_stop=-1, reward_dist=-0.1, reward_time=-0.1, reward_heading=-0.1, reward_collision=-1, reward_goal=100, window_size=140
     )
-    env = pklot_env_cont.raw_env(n_vehicles=2, random_reset=False, render_mode='rgb_array',
-                                 params=env_config, max_cycles=200)
-
-    env = ss.resize_v1(env, 84, 84)
-    env = ss.black_death_v3(env)
+    env = pklot_env_cont.raw_env(n_vehicles=4, random_reset=False, render_mode='rgb_array',
+                                 params=env_config, max_cycles=400)
     return env
 
 
@@ -49,7 +46,7 @@ for agent in env.agent_iter():
     if termination or truncation:
         action = None
     else:
-        action = PPO_agent.compute_single_action(observation.copy(), policy_id="shared_policy")
+        action = PPO_agent.compute_single_action(observation.copy(), policy_id=agent)
 
     env.step(action)
 
