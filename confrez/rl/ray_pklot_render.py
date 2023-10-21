@@ -5,57 +5,72 @@ import numpy as np
 import ray
 import supersuit as ss
 from PIL import Image
-from ray.rllib.algorithms.ppo import PPO, PPOConfig
 from ray.rllib.algorithms import Algorithm
-from ray.rllib.env.wrappers.pettingzoo_env import PettingZooEnv
+from ray.rllib.policy.policy import Policy
+from ray.rllib.env.wrappers.pettingzoo_env import PettingZooEnv, ParallelPettingZooEnv
 from ray.rllib.models import ModelCatalog
+from ray.tune import tune
 from ray.tune.registry import register_env
 import pklot_env_unicycle_cont as pklot_env_cont
+import matplotlib.pyplot as plt
+from ray.rllib.algorithms.ppo import PPO, PPOConfig
 
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 
-checkpoint_path = os.path.expanduser("ray_results/pk_lot/PPO-4-randFalse-m_cycles400/"
-                                     "PPO_pk_lot_d6de6_00000_0_2023-10-09_00-17-00/checkpoint_000250")
+checkpoint_path = os.path.expanduser("ray_results/pk_lot/PPO-4-randFalse-m_cycles500/"
+                                     "PPO_pk_lot_66371_00000_0_2023-10-19_06-57-10/checkpoint_000800")
 
 
 def get_env(render=False):
     """This function is needed to provide callables for DummyVectorEnv."""
     env_config = pklot_env_cont.EnvParams(
-        reward_stop=-1, reward_dist=-0.1, reward_time=-0.1, reward_heading=-0.1, reward_collision=-1, reward_goal=100, window_size=140
+        reward_stop=-1, reward_dist=-0.1, reward_heading=-0.1, reward_time=-0.1, reward_collision=-1, reward_goal=100,
+        window_size=140
     )
-    env = pklot_env_cont.raw_env(n_vehicles=4, random_reset=False, render_mode='rgb_array',
-                                 params=env_config, max_cycles=400)
+    env = pklot_env_cont.parallel_env(n_vehicles=4, random_reset=False, render_mode="rgb_array",
+                                      params=env_config, max_cycles=500)
     return env
 
 
 env = get_env()
 env_name = "pk_lot"
-register_env(env_name, lambda config: PettingZooEnv(get_env()))
+register_env(env_name, lambda config: ParallelPettingZooEnv(get_env()))
 
-ray.init(local_mode=True)
-PPO_agent = Algorithm.from_checkpoint(checkpoint_path)
+ray.init(local_mode=True, num_gpus=1)
+PPO_agent = Algorithm.from_checkpoint(checkpoint_path)  #{agent_id: Policy.from_checkpoint(f'{checkpoint_path}/policies/{agent_id}') for agent_id in env.possible_agents}
+# PPO_agent = PPOConfig().environment('pk_lot', disable_env_checking=True).training(model={"dim": 140, "use_lstm": False, "framestack": True,  # "post_fcnet_hiddens": [512, 512],
+#                    "vf_share_layers": True, "free_log_std": False,
+#                    "conv_filters": [[16, [16, 16], 4], [32, [4, 4], 2], [64, [4, 4], 2], [512, [9, 9], 1]]},).build()
+# PPO_agent.restore(checkpoint_path)
 
 reward_sum = 0
 frame_list = []
+obs_list = []
 i = 0
 actions = {}
-env.reset()
+obs, _ = env.reset()
 
-for agent in env.agent_iter():
-    observation, reward, termination, truncation, info = env.last()
-    if termination or truncation:
-        action = None
-    else:
-        action = PPO_agent.compute_single_action(observation.copy(), policy_id=agent)
+while True:
+    actions = {}
+    for num in range(env.num_agents):
+        agent = list(obs.keys())[num]
+        current_obs = obs[agent].copy()
+        action = (PPO_agent.compute_single_action
+                           (current_obs, policy_id=agent))
+        action = np.clip(action, env.action_space(agent).low, env.action_space(agent).high)
+        actions[agent] = action
+    obs, reward, termination, truncation, _ = env.step(actions)
+    if True in termination.values() or True in truncation.values():
+        break
 
-    env.step(action)
-
-    reward_sum += reward
+    reward_sum += sum(reward.values())
 
     i += 1
     if i % (len(env.possible_agents) + 1) == 0:
         img = Image.fromarray(env.render())
         frame_list.append(img)
+        # img = Image.fromarray(obs)
+        # obs_list.append(img)
 env.close()
 
 print(reward_sum)

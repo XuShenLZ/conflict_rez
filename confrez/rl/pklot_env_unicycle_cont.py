@@ -195,6 +195,7 @@ class parallel_env(ParallelEnv, EzPickle):
 
         self.init_walls()
         self.collisions = {agent_id: False for agent_id in self.possible_agents}
+        self._agent_ids = set(self.possible_agents[:])
 
     def g2i(self, x: float, y: float) -> Tuple[float, float]:
         """
@@ -638,7 +639,7 @@ class parallel_env(ParallelEnv, EzPickle):
         observation = np.rot90(observation, k=3)
         observation = np.fliplr(observation)
 
-        return observation
+        return (observation / 255).astype(np.float32)
 
     def enable_render(self):
         """
@@ -744,7 +745,7 @@ class parallel_env(ParallelEnv, EzPickle):
             for agent in self.agents:
                 self.move(agent=agent, action=actions[agent])
                 if self.has_collision(agent):
-                    # print("colliding")
+                    # TODO: Potentially change but leaving it for now
                     self.collisions[agent] = True
                     self.move(agent=agent, action=-actions[agent])
 

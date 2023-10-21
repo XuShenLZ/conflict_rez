@@ -31,7 +31,7 @@ from torch import nn
 
 n_agents = 4
 random_reset = False
-max_cycles = 400
+max_cycles = 500
 
 
 def get_env(render=False):
@@ -54,8 +54,8 @@ if __name__ == "__main__":
     register_env("pk_lot", lambda config: ParallelPettingZooEnv(get_env()))
     env_name = "pk_lot"
     env = get_env()
-    rollout_workers = 28
-    rollout_length = 400
+    rollout_workers = 24
+    rollout_length = 100
     num_envs_per = 1
 
     batch_size = rollout_workers * rollout_length * num_envs_per
@@ -63,16 +63,16 @@ if __name__ == "__main__":
 
     config = (
         PPOConfig()  # Version 2.5.0
-        .environment(env="pk_lot", disable_env_checking=True, render_env=True)  # , env_task_fn=curriculum_fn
+        .environment(env="pk_lot", disable_env_checking=True, render_env=False)  # , env_task_fn=curriculum_fn
         .rollouts(num_rollout_workers=rollout_workers, rollout_fragment_length=rollout_length,
-                  num_envs_per_worker=num_envs_per, observation_filter="MeanStdFilter")
+                  num_envs_per_worker=num_envs_per)
         .training(
             train_batch_size=batch_size,
             lr=5e-4,
             kl_coeff=0.2,
             kl_target=1e-3,
             gamma=0.99,
-            lambda_=0.98,
+            lambda_=0.95,
             use_gae=True,
             clip_param=0.3,
             grad_clip=20,
@@ -81,7 +81,7 @@ if __name__ == "__main__":
             vf_clip_param=10,  # 10 (2 vehicle)
             sgd_minibatch_size=512,
             num_sgd_iter=20,
-            model={"dim": 140, "use_lstm": False, "framestack": True, #"post_fcnet_hiddens": [512, 512],
+            model={"dim": 140, "use_lstm": False, "framestack": True,  # "post_fcnet_hiddens": [512, 512],
                    "vf_share_layers": True, "free_log_std": False,
                    "conv_filters": [[16, [16, 16], 4], [32, [4, 4], 2], [64, [4, 4], 2], [512, [9, 9], 1]]},
         )
@@ -89,14 +89,15 @@ if __name__ == "__main__":
         .framework(framework="torch")
         .resources(num_gpus=1)
         .multi_agent(
-            policies=env.possible_agents, #{"shared_policy"},
-            policy_mapping_fn=(lambda agent_id, episode, worker, **kwargs: agent_id)#"shared_policy")
+            policies=env.possible_agents,  # {"shared_policy"},
+            policy_mapping_fn=(lambda agent_id, episode, worker, **kwargs: agent_id)  # "shared_policy")
         )
     )
 
     results = tune.run(
         "PPO",
-        name=f"PPO-{n_agents}-rand{random_reset}-m_cycles{max_cycles}",# + "/PPO_pk_lot_28df8_00000_0_2023-09-11_14-50-01",
+        name=f"PPO-{n_agents}-rand{random_reset}-m_cycles{max_cycles}",
+        # + "/PPO_pk_lot_28df8_00000_0_2023-09-11_14-50-01",
         verbose=0,
         metric="episode_reward_mean",
         mode="max",
