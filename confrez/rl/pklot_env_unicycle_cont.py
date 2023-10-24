@@ -639,7 +639,7 @@ class parallel_env(ParallelEnv, EzPickle):
         observation = np.rot90(observation, k=3)
         observation = np.fliplr(observation)
 
-        return (observation / 255).astype(np.float32)
+        return (observation / 256).astype(np.float16)
 
     def enable_render(self):
         """

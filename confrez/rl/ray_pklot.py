@@ -1,5 +1,6 @@
 from abc import ABC
 
+import numpy as np
 from ray.rllib.models import ModelCatalog
 from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
 from ray.tune.registry import register_env
@@ -34,6 +35,34 @@ random_reset = False
 max_cycles = 500
 
 
+class Filter:
+    is_concurrent = True
+
+    def __init__(self, *args):
+        pass
+
+    def __call__(self, x, update=True):
+        try:
+            return np.asarray(x) / 255
+        except Exception:
+            raise ValueError("Failed to convert to array", x)
+
+    def apply_changes(self, other, *args, **kwargs):
+        pass
+
+    def copy(self):
+        return self
+
+    def sync(self, other):
+        pass
+
+    def clear_buffer(self):
+        pass
+
+    def as_serializable(self):
+        return self
+
+
 def get_env(render=False):
     """This function is needed to provide callables for DummyVectorEnv."""
     env_config = pklot_env_cont.EnvParams(
@@ -54,7 +83,7 @@ if __name__ == "__main__":
     register_env("pk_lot", lambda config: ParallelPettingZooEnv(get_env()))
     env_name = "pk_lot"
     env = get_env()
-    rollout_workers = 24
+    rollout_workers = 16
     rollout_length = 100
     num_envs_per = 1
 
@@ -65,7 +94,7 @@ if __name__ == "__main__":
         PPOConfig()  # Version 2.5.0
         .environment(env="pk_lot", disable_env_checking=True, render_env=False)  # , env_task_fn=curriculum_fn
         .rollouts(num_rollout_workers=rollout_workers, rollout_fragment_length=rollout_length,
-                  num_envs_per_worker=num_envs_per)
+                  num_envs_per_worker=num_envs_per, observation_filter=Filter)
         .training(
             train_batch_size=batch_size,
             lr=5e-4,
@@ -107,4 +136,5 @@ if __name__ == "__main__":
         config=config.to_dict(),
         max_failures=-1,
         callbacks=[WandbLoggerCallback(project="confrez-ray", entity="confrez")],
+        resume=True
     )
