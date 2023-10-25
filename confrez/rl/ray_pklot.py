@@ -108,5 +108,4 @@ if __name__ == "__main__":
         config=config.to_dict(),
         max_failures=-1,
         callbacks=[WandbLoggerCallback(project="confrez-ray", entity="confrez")],
-        resume=True
     )
