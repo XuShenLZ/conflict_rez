@@ -38,7 +38,7 @@ max_cycles = 500
 def get_env(render=False):
     """This function is needed to provide callables for DummyVectorEnv."""
     env_config = pklot_env_cont.EnvParams(
-        reward_stop=-1, reward_dist=-0.1, reward_heading=-0.1, reward_time=-0.1, reward_collision=-1, reward_goal=100,
+        reward_stop=-10, reward_dist=-1, reward_heading=-1, reward_time=-1, reward_collision=-10, reward_goal=1000,
         window_size=140
     )
     env = pklot_env_cont.parallel_env(n_vehicles=n_agents, random_reset=random_reset, render_mode="rgb_array",
@@ -56,10 +56,10 @@ if __name__ == "__main__":
     env_name = "pk_lot"
     env = get_env()
     rollout_workers = 10
-    rollout_length = 100
+    rollout_length = 50
     num_envs_per = 2
 
-    batch_size = rollout_workers * rollout_length * num_envs_per
+    batch_size = rollout_workers * rollout_length * num_envs_per * 5
     mini_batch = 8
 
     config = (
@@ -77,9 +77,9 @@ if __name__ == "__main__":
             use_gae=True,
             clip_param=0.3,
             grad_clip=20,
-            entropy_coeff=1e-2,
-            vf_loss_coeff=0.05,  # 0.05
-            vf_clip_param=10,  # 10 (2 vehicle)
+            entropy_coeff=0.01,
+            vf_loss_coeff=0.002,  # 0.05
+            vf_clip_param=80,  # 10 (2 vehicle)
             sgd_minibatch_size=512,
             num_sgd_iter=20,
             model={"dim": 140, "use_lstm": False, "framestack": True,  # "post_fcnet_hiddens": [512, 512],
@@ -90,8 +90,8 @@ if __name__ == "__main__":
         .framework(framework="torch")
         .resources(num_gpus=1)
         .multi_agent(
-            policies=env.possible_agents,  # {"shared_policy"},
-            policy_mapping_fn=(lambda agent_id, episode, worker, **kwargs: agent_id)  # "shared_policy")
+            policies={"shared_policy"}, #env.possible_agents,  
+            policy_mapping_fn=(lambda agent_id, episode, worker, **kwargs: "shared_policy") #lambda agent_id, episode, worker, **kwargs: agent_id)  
         )
     )
 
