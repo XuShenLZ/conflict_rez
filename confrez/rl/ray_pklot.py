@@ -35,10 +35,38 @@ random_reset = False
 max_cycles = 500
 
 
+class Filter:
+    is_concurrent = True
+
+    def __init__(self, *args):
+        pass
+
+    def __call__(self, x, update=True):
+        try:
+            return np.asarray(x) / 255
+        except Exception:
+            raise ValueError("Failed to convert to array", x)
+
+    def apply_changes(self, other, *args, **kwargs):
+        pass
+
+    def copy(self):
+        return self
+
+    def sync(self, other):
+        pass
+
+    def clear_buffer(self):
+        pass
+
+    def as_serializable(self):
+        return self
+
+
 def get_env(render=False):
     """This function is needed to provide callables for DummyVectorEnv."""
     env_config = pklot_env_cont.EnvParams(
-        reward_stop=-10, reward_dist=-1, reward_heading=-1, reward_time=-1, reward_collision=-10, reward_goal=1000,
+        reward_stop=-1, reward_dist=-0.1, reward_heading=-0.1, reward_time=-0.1, reward_collision=-1, reward_goal=100,
         window_size=140
     )
     env = pklot_env_cont.parallel_env(n_vehicles=n_agents, random_reset=random_reset, render_mode="rgb_array",
@@ -55,18 +83,18 @@ if __name__ == "__main__":
     register_env("pk_lot", lambda config: ParallelPettingZooEnv(get_env()))
     env_name = "pk_lot"
     env = get_env()
-    rollout_workers = 10
-    rollout_length = 50
-    num_envs_per = 2
+    rollout_workers = 16
+    rollout_length = 100
+    num_envs_per = 1
 
-    batch_size = rollout_workers * rollout_length * num_envs_per * 5
+    batch_size = rollout_workers * rollout_length * num_envs_per
     mini_batch = 8
 
     config = (
         PPOConfig()  # Version 2.5.0
         .environment(env="pk_lot", disable_env_checking=True, render_env=False)  # , env_task_fn=curriculum_fn
         .rollouts(num_rollout_workers=rollout_workers, rollout_fragment_length=rollout_length,
-                  num_envs_per_worker=num_envs_per)
+                  num_envs_per_worker=num_envs_per, observation_filter=Filter)
         .training(
             train_batch_size=batch_size,
             lr=5e-4,
@@ -77,9 +105,9 @@ if __name__ == "__main__":
             use_gae=True,
             clip_param=0.3,
             grad_clip=20,
-            entropy_coeff=0.01,
-            vf_loss_coeff=0.002,  # 0.05
-            vf_clip_param=80,  # 10 (2 vehicle)
+            entropy_coeff=1e-2,
+            vf_loss_coeff=0.05,  # 0.05
+            vf_clip_param=10,  # 10 (2 vehicle)
             sgd_minibatch_size=512,
             num_sgd_iter=20,
             model={"dim": 140, "use_lstm": False, "framestack": True,  # "post_fcnet_hiddens": [512, 512],
@@ -90,8 +118,8 @@ if __name__ == "__main__":
         .framework(framework="torch")
         .resources(num_gpus=1)
         .multi_agent(
-            policies={"shared_policy"}, #env.possible_agents,  
-            policy_mapping_fn=(lambda agent_id, episode, worker, **kwargs: "shared_policy") #lambda agent_id, episode, worker, **kwargs: agent_id)  
+            policies=env.possible_agents,  # {"shared_policy"},
+            policy_mapping_fn=(lambda agent_id, episode, worker, **kwargs: agent_id)  # "shared_policy")
         )
     )
 
@@ -108,4 +136,5 @@ if __name__ == "__main__":
         config=config.to_dict(),
         max_failures=-1,
         callbacks=[WandbLoggerCallback(project="confrez-ray", entity="confrez")],
+        resume=True
     )
