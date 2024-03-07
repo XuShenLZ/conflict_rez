@@ -26,8 +26,8 @@ def get_env(render=False):
         reward_stop=-1, reward_dist=-0.1, reward_heading=-0.1, reward_time=-0.1, reward_collision=-1, reward_goal=100,
         window_size=140
     )
-    env = pklot_env_cont.parallel_env(n_vehicles=4, random_reset=False, render_mode="rgb_array",
-                                      params=env_config, max_cycles=500)
+    env = pklot_env_cont.parallel_env(n_vehicles=4, random_reset=True, render_mode="rgb_array",
+                                      params=env_config, max_cycles=1000)
     return env
 
 
@@ -59,7 +59,7 @@ while True:
         action = np.clip(action, env.action_space(agent).low, env.action_space(agent).high)
         actions[agent] = action
     obs, reward, termination, truncation, _ = env.step(actions)
-    if True in termination.values():
+    if False not in termination.values():
         break
 
     reward_sum += sum(reward.values())

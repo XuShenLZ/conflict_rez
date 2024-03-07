@@ -148,7 +148,9 @@ class parallel_env(ParallelEnv, EzPickle):
                 * self.n_vehicles,
             )
         )
-
+        self.possible_angles = [0, np.pi / 2, np.pi, -np.pi / 2]
+        self.possible_x = np.linspace(2, 12, num=20)
+        self.possible_y = np.linspace(2, 12, num=20)
         # ======== Initial and final states of all agents
         self.agent_configs = [
             {
@@ -211,10 +213,11 @@ class parallel_env(ParallelEnv, EzPickle):
 
     def init_vehicles(self):
         if self.random_reset:
-            n_vehicles = self.n_vehicles #random.choice(range(1, self.n_vehicles + 1))
+            n_vehicles = self.n_vehicles
             self.agents = sorted(random.sample(self.possible_agents, n_vehicles))
-
+            #
             configs = random.sample(self.agent_configs, n_vehicles)
+
         else:
             self.agents = self.possible_agents[:]
             configs = self.agent_configs[:]
@@ -229,22 +232,39 @@ class parallel_env(ParallelEnv, EzPickle):
 
         for agent, config in zip(self.agents, configs):
             # Apply offsets so that the state and goal is about the rear axle center
-            init_state = config["init_state"]
-            self.states[agent].x.x = init_state[0] - self.vb.wb / 2 * np.cos(
-                init_state[2]
-            )
-            self.states[agent].x.y = init_state[1] - self.vb.wb / 2 * np.sin(
-                init_state[2]
-            )
-            self.states[agent].e.psi = init_state[2]
+            if self.random_reset:
+                goal = config["goal"]
 
-            self.update_vehicle_polygon(agent)
+                self.goals[agent].x.x = goal[0] - self.vb.wb / 2 * np.cos(goal[2])
+                self.goals[agent].x.y = goal[1] - self.vb.wb / 2 * np.sin(goal[2])
+                self.goals[agent].e.psi = goal[2]
 
-            goal = config["goal"]
+                while True:
+                    init_state = [np.random.choice(self.possible_x) * self.spot_width,
+                                  np.random.choice(self.possible_y) * self.spot_width,
+                                  np.random.choice(self.possible_angles)]
 
-            self.goals[agent].x.x = goal[0] - self.vb.wb / 2 * np.cos(goal[2])
-            self.goals[agent].x.y = goal[1] - self.vb.wb / 2 * np.sin(goal[2])
-            self.goals[agent].e.psi = goal[2]
+                    self.states[agent].x.x = init_state[0]
+                    self.states[agent].x.y = init_state[1]
+                    self.states[agent].e.psi = init_state[2]
+
+                    self.update_vehicle_polygon(agent)
+                    if self.has_collision(agent):
+                        continue
+                    else:
+                        break
+            else:
+                goal = config["goal"]
+
+                self.goals[agent].x.x = goal[0]
+                self.goals[agent].x.y = goal[1]
+                self.goals[agent].e.psi = goal[2]
+
+                init_state = config["init_state"]
+
+                self.states[agent].x.x = init_state[0]
+                self.states[agent].x.y = init_state[1]
+                self.states[agent].e.psi = init_state[2]
 
     def init_walls(self) -> None:
         """
@@ -703,7 +723,7 @@ class parallel_env(ParallelEnv, EzPickle):
         self.init_vehicles()
 
         self.draw_walls()
-        # self.agents = self.possible_agents[:]
+        self.agents = self.possible_agents[:]
 
         observations = {agent: self.observe(agent) for agent in self.agents}
 

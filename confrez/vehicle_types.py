@@ -16,7 +16,7 @@ class VehicleBody(BasePolytopeObstacle):
     # Wheelbase
     hf: float = field(default=0.8)  # Front hang length
     wb: float = field(default=2.5)  # Wheelbase
-    hr: float = field(default=0.6)  # Rear hang length
+    hr: float = field(default=0.8)  # Rear hang length
 
     offset: float = field(default=0)  # Offset from rear axis center to vehicle center
     lf: float = field(default=0)  # From rear axis center to front bumper
