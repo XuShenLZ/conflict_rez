@@ -150,7 +150,9 @@ class parallel_env(ParallelEnv, EzPickle):
         )
         self.possible_angles = [0, np.pi / 2, np.pi, -np.pi / 2]
         self.possible_x = np.linspace(2, 12, num=20)
-        self.possible_y = np.linspace(2, 12, num=20)
+        self.possible_y = np.linspace(4, 10, num=20)
+        self.possible_goals = np.linspace(3.5, 8.5, num=6, endpoint=True)
+
         # ======== Initial and final states of all agents
         self.agent_configs = [
             {
@@ -169,7 +171,7 @@ class parallel_env(ParallelEnv, EzPickle):
                 "init_state": [5 * self.spot_width, 6.5 * self.spot_width, 0],
                 "goal": [6.5 * self.spot_width, 10 * self.spot_width, np.pi / 2],
             },
-        ]
+        ] * 4
 
         self.max_cycles = max_cycles
         self.frame = 0
@@ -230,30 +232,50 @@ class parallel_env(ParallelEnv, EzPickle):
             agent: VehicleState() for agent in self.agents
         }
 
-        for agent, config in zip(self.agents, configs):
-            # Apply offsets so that the state and goal is about the rear axle center
-            if self.random_reset:
-                goal = config["goal"]
+        parking_spots = []
+        parking_spots += [[(goal + 1) * self.spot_width, 10 * self.spot_width, np.pi / 2] for goal in self.goals_top]
+        parking_spots += [[(goal + 1) * self.spot_width, 4 * self.spot_width, np.pi / 2] for goal in self.goals_bottom]
+        parking_spots += [
+            [12 * self.spot_width, 6.5 * self.spot_width, 0],
+            [12 * self.spot_width, 7.5 * self.spot_width, 0],
+        ]
+        parking_spots += [
+            [2 * self.spot_width, 6.5 * self.spot_width, 0],
+            [2 * self.spot_width, 7.5 * self.spot_width, 0],
+        ]
+        goals = random.sample(parking_spots, k=self.num_agents)
+        if self.random_reset:
+            for agent, config in zip(self.agents, goals):
+                # Apply offsets so that the state and goal is about the rear axle center
+                goal = config
+                orientation = np.random.choice([0, np.pi])
+                y_d = 1 * self.spot_width if orientation == np.pi and goal[2] == np.pi / 2 else 0
+                x_d = 1 * self.spot_width if orientation == np.pi and goal[2] == 0 else 0
 
-                self.goals[agent].x.x = goal[0] - self.vb.wb / 2 * np.cos(goal[2])
-                self.goals[agent].x.y = goal[1] - self.vb.wb / 2 * np.sin(goal[2])
-                self.goals[agent].e.psi = goal[2]
+                self.goals[agent].x.x = goal[0] - self.vb.wb / 2 * np.cos(goal[2]) + x_d
+                self.goals[agent].x.y = goal[1] - self.vb.wb / 2 * np.sin(goal[2]) + y_d
+                self.goals[agent].e.psi = goal[2] + orientation
 
                 while True:
-                    init_state = [np.random.choice(self.possible_x) * self.spot_width,
-                                  np.random.choice(self.possible_y) * self.spot_width,
-                                  np.random.choice(self.possible_angles)]
+                    if np.random.random() < 0.5:
+                        init_state = [np.random.choice(self.possible_x) * self.spot_width,
+                                      np.random.choice(self.possible_y) * self.spot_width,
+                                      np.random.choice(self.possible_angles)]
+                    else:
+                        init_state = random.choice(parking_spots)
 
                     self.states[agent].x.x = init_state[0]
                     self.states[agent].x.y = init_state[1]
                     self.states[agent].e.psi = init_state[2]
 
                     self.update_vehicle_polygon(agent)
-                    if self.has_collision(agent):
+                    if self.has_collision(agent) or np.linalg.norm([init_state[0] - self.goals[agent].x.x,
+                                                                    init_state[1] - self.goals[agent].x.y]) < 4:
                         continue
                     else:
                         break
-            else:
+        else:
+            for agent, config in zip(self.agents, configs):
                 goal = config["goal"]
 
                 self.goals[agent].x.x = goal[0]
@@ -272,6 +294,11 @@ class parallel_env(ParallelEnv, EzPickle):
         """
         self.walls: List[Polygon] = []
 
+        self.goals_top = np.random.choice(self.possible_goals, 1)
+        self.goals_top = np.append(self.goals_top, np.random.randint(2, 11.5 - self.goals_top[0]) + self.goals_top[0])
+        self.goals_bottom = np.random.choice(self.possible_goals, 1)
+        self.goals_bottom = np.append(self.goals_bottom, np.random.randint(2, 11.5 - self.goals_bottom[0]) + self.goals_bottom[0])
+
         # =============== Static obstacles
         # Bottom left
         self.walls.append(
@@ -286,11 +313,11 @@ class parallel_env(ParallelEnv, EzPickle):
                         5.5 * self.spot_width,
                     ],
                     [
-                        5.5 * self.spot_width + self.vb.w / 2,
+                        (5.5 if not self.random_reset else (min(self.goals_bottom))) * self.spot_width + self.vb.w / 2,
                         5.5 * self.spot_width,
                     ],
                     [
-                        5.5 * self.spot_width + self.vb.w / 2,
+                        (5.5 if not self.random_reset else min(self.goals_bottom)) * self.spot_width + self.vb.w / 2,
                         3 * self.spot_width,
                     ],
                 ]
@@ -301,19 +328,19 @@ class parallel_env(ParallelEnv, EzPickle):
             Polygon(
                 [
                     [
-                        7.5 * self.spot_width - self.vb.w / 2,
+                        (7.5 if not self.random_reset else min(self.goals_bottom) + 2) * self.spot_width - self.vb.w / 2,
                         3 * self.spot_width,
                     ],
                     [
-                        7.5 * self.spot_width - self.vb.w / 2,
+                        (7.5 if not self.random_reset else min(self.goals_bottom) + 2) * self.spot_width - self.vb.w / 2,
                         5.5 * self.spot_width,
                     ],
                     [
-                        7.5 * self.spot_width + self.vb.w / 2,
+                        (7.5 if not self.random_reset else max(self.goals_bottom)) * self.spot_width + self.vb.w / 2,
                         5.5 * self.spot_width,
                     ],
                     [
-                        7.5 * self.spot_width + self.vb.w / 2,
+                        (7.5 if not self.random_reset else max(self.goals_bottom)) * self.spot_width + self.vb.w / 2,
                         3 * self.spot_width,
                     ],
                 ]
@@ -324,11 +351,11 @@ class parallel_env(ParallelEnv, EzPickle):
             Polygon(
                 [
                     [
-                        9.5 * self.spot_width - self.vb.w / 2,
+                        (9.5 if not self.random_reset else max(self.goals_bottom) + 2) * self.spot_width - self.vb.w / 2,
                         3 * self.spot_width,
                     ],
                     [
-                        9.5 * self.spot_width - self.vb.w / 2,
+                        (9.5 if not self.random_reset else max(self.goals_bottom) + 2) * self.spot_width - self.vb.w / 2,
                         5.5 * self.spot_width,
                     ],
                     [
@@ -355,11 +382,11 @@ class parallel_env(ParallelEnv, EzPickle):
                         11 * self.spot_width,
                     ],
                     [
-                        5.5 * self.spot_width + self.vb.w / 2,
+                        (5.5 if not self.random_reset else min(self.goals_top)) * self.spot_width + self.vb.w / 2,
                         11 * self.spot_width,
                     ],
                     [
-                        5.5 * self.spot_width + self.vb.w / 2,
+                        (5.5 if not self.random_reset else min(self.goals_top)) * self.spot_width + self.vb.w / 2,
                         8.5 * self.spot_width,
                     ],
                 ]
@@ -370,19 +397,19 @@ class parallel_env(ParallelEnv, EzPickle):
             Polygon(
                 [
                     [
-                        7.5 * self.spot_width - self.vb.w / 2,
+                        (7.5 if not self.random_reset else min(self.goals_top) + 2) * self.spot_width - self.vb.w / 2,
                         8.5 * self.spot_width,
                     ],
                     [
-                        7.5 * self.spot_width - self.vb.w / 2,
+                        (7.5 if not self.random_reset else min(self.goals_top) + 2) * self.spot_width - self.vb.w / 2,
                         11 * self.spot_width,
                     ],
                     [
-                        8.5 * self.spot_width + self.vb.w / 2,
+                        (8.5 if not self.random_reset else max(self.goals_top)) * self.spot_width + self.vb.w / 2,
                         11 * self.spot_width,
                     ],
                     [
-                        8.5 * self.spot_width + self.vb.w / 2,
+                        (8.5 if not self.random_reset else max(self.goals_top)) * self.spot_width + self.vb.w / 2,
                         8.5 * self.spot_width,
                     ],
                 ]
@@ -393,11 +420,11 @@ class parallel_env(ParallelEnv, EzPickle):
             Polygon(
                 [
                     [
-                        10.5 * self.spot_width - self.vb.w / 2,
+                        (10.5 if not self.random_reset else max(self.goals_top) + 2) * self.spot_width - self.vb.w / 2,
                         8.5 * self.spot_width,
                     ],
                     [
-                        10.5 * self.spot_width - self.vb.w / 2,
+                        (10.5 if not self.random_reset else max(self.goals_top) + 2) * self.spot_width - self.vb.w / 2,
                         11 * self.spot_width,
                     ],
                     [
@@ -632,15 +659,6 @@ class parallel_env(ParallelEnv, EzPickle):
         """
         surf = self.canvas.copy()
 
-        # Draw all goals first
-        i = 1  # Index of color
-        for _agent in self.agents:
-            if _agent == agent:
-                continue
-            else:
-                self.draw_goal(agent=_agent, color=self._colors[i], surf=surf)
-                i += 1
-
         # Draw all cars next to cover goals
         i = 1  # Index of color
         for _agent in self.agents:
@@ -650,9 +668,18 @@ class parallel_env(ParallelEnv, EzPickle):
                 self.draw_car(agent=_agent, color=self._colors[i], surf=surf)
                 i += 1
 
+        # Draw all goals first
+        i = 1  # Index of color
+        for _agent in self.agents:
+            if _agent == agent:
+                continue
+            else:
+                self.draw_goal(agent=_agent, color=self._colors[i], surf=surf)
+                i += 1
+
         # plot the car itself with ego color
-        self.draw_goal(agent=agent, color=self._colors[0], surf=surf)
         self.draw_car(agent=agent, color=self._colors[0], surf=surf)
+        self.draw_goal(agent=agent, color=self._colors[0], surf=surf)
 
         # Return an image
         observation = pygame.surfarray.pixels3d(surf)
@@ -681,12 +708,12 @@ class parallel_env(ParallelEnv, EzPickle):
 
         # Draw agents
         for agent in self.agents:
-            self.draw_goal(
+            self.draw_car(
                 agent, color=self._colors[self.agent_name_mapping[agent]], surf=surf
             )
 
         for agent in self.agents:
-            self.draw_car(
+            self.draw_goal(
                 agent, color=self._colors[self.agent_name_mapping[agent]], surf=surf
             )
 
