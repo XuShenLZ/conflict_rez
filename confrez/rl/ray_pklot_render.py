@@ -23,10 +23,10 @@ checkpoint_path = os.path.expanduser("ray_results/pk_lot/PPO-4-randTrue-m_cycles
 def get_env(render=False):
     """This function is needed to provide callables for DummyVectorEnv."""
     env_config = pklot_env_cont.EnvParams(
-        reward_stop=-1, reward_dist=-0.1, reward_heading=-0.1, reward_time=-0.1, reward_collision=-1, reward_goal=100,
+        reward_stop=-10, reward_dist=-1, reward_heading=-1, reward_time=-1, reward_collision=-10, reward_goal=1000,
         window_size=140
     )
-    env = pklot_env_cont.parallel_env(n_vehicles=4, random_reset=True, render_mode="rgb_array",
+    env = pklot_env_cont.parallel_env(n_vehicles=4, random_reset=False, render_mode="rgb_array",
                                       params=env_config, max_cycles=1000)
     return env
 

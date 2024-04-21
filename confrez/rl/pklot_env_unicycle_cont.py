@@ -171,7 +171,7 @@ class parallel_env(ParallelEnv, EzPickle):
                 "init_state": [5 * self.spot_width, 6.5 * self.spot_width, 0],
                 "goal": [6.5 * self.spot_width, 10 * self.spot_width, np.pi / 2],
             },
-        ] * 4
+        ]
 
         self.max_cycles = max_cycles
         self.frame = 0
@@ -267,17 +267,18 @@ class parallel_env(ParallelEnv, EzPickle):
                     y_d = 1 * self.spot_width if orientation == np.pi and goal[2] == np.pi / 2 else 0
                     x_d = 1 * self.spot_width if orientation == np.pi and goal[2] == 0 else 0
 
-                    self.states[agent].x.x = init_state[0] + x_d - self.vb.wb / 2 * np.cos(goal[2])
-                    self.states[agent].x.y = init_state[1] + y_d - self.vb.wb / 2 * np.sin(goal[2])
+                    self.states[agent].x.x = init_state[0] + x_d - self.vb.wb / 2 * np.cos(init_state[2])
+                    self.states[agent].x.y = init_state[1] + y_d - self.vb.wb / 2 * np.sin(init_state[2])
                     self.states[agent].e.psi = init_state[2] + orientation
 
                     self.update_vehicle_polygon(agent)
-                    if self.has_collision(agent) or np.linalg.norm([init_state[0] - self.goals[agent].x.x, init_state[1] - self.goals[agent].x.y]) < 5:
+                    if self.has_collision(agent) or np.linalg.norm([init_state[0] - self.goals[agent].x.x, init_state[1] - self.goals[agent].x.y]) < 2:
                         continue
                     else:
                         break
         else:
             for agent, config in zip(self.agents, configs):
+                # print(agent, config)
                 goal = config["goal"]
 
                 self.goals[agent].x.x = goal[0] - self.vb.wb / 2 * np.cos(goal[2])
@@ -286,9 +287,17 @@ class parallel_env(ParallelEnv, EzPickle):
 
                 init_state = config["init_state"]
 
-                self.states[agent].x.x = init_state[0]
-                self.states[agent].x.y = init_state[1]
+                self.states[agent].x.x = init_state[0] - self.vb.wb / 2 * np.cos(
+                    init_state[2]
+                )
+                self.states[agent].x.y = init_state[1] - self.vb.wb / 2 * np.sin(
+                    init_state[2]
+                )
                 self.states[agent].e.psi = init_state[2]
+                
+                self.update_vehicle_polygon(agent)
+
+
 
     def init_walls(self) -> None:
         """
