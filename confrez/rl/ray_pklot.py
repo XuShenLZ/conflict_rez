@@ -1,5 +1,7 @@
 from abc import ABC
 
+import imageio
+import wandb
 import numpy as np
 from ray.rllib.models import ModelCatalog
 from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
@@ -21,46 +23,10 @@ from ray.rllib.policy import Policy
 import ray
 
 import pklot_env_unicycle_cont as pklot_env_cont
-from ray.rllib.policy.sample_batch import SampleBatch
-import pklot_env_unicycle as pklot_env_disc
-import supersuit as ss
-
-import os
-import random
-from typing import Dict, Tuple, List
-from torch import nn
 
 n_agents = 4
-random_reset = False
+random_reset = True
 max_cycles = 500
-
-
-class Filter:
-    is_concurrent = True
-
-    def __init__(self, *args):
-        pass
-
-    def __call__(self, x, update=True):
-        try:
-            return np.asarray(x) / 255
-        except Exception:
-            raise ValueError("Failed to convert to array", x)
-
-    def apply_changes(self, other, *args, **kwargs):
-        pass
-
-    def copy(self):
-        return self
-
-    def sync(self, other):
-        pass
-
-    def clear_buffer(self):
-        pass
-
-    def as_serializable(self):
-        return self
 
 
 def get_env(render=False):
@@ -75,6 +41,33 @@ def get_env(render=False):
     return env
 
 
+def capture_frames(env, num_frames=100):
+    frames = []
+    for _ in range(num_frames):
+        frames.append(env.render(mode='rgb_array'))
+        env.step(env.action_spaces.sample())
+    return frames
+
+
+def create_gif(frames, filename):
+    imageio.mimsave(filename, frames, fps=30)
+
+
+class UploadGifCallback(ray.tune.callback.Callback):
+    def on_trial_save(self, iteration, *args, **kwargs):
+        print(iteration)
+        # Capture frames
+        env = get_env()
+        frames = capture_frames(env)
+
+        # Create GIF
+        gif_filename = f"environment_{iteration}.gif"
+        create_gif(frames, gif_filename)
+
+        # Upload GIF to wandb
+        wandb.log({"environment_gif": wandb.Video(gif_filename)})
+
+
 if __name__ == "__main__":
     # Reward normalization: TODO
     ray.init(local_mode=False)
@@ -83,18 +76,18 @@ if __name__ == "__main__":
     register_env("pk_lot", lambda config: ParallelPettingZooEnv(get_env()))
     env_name = "pk_lot"
     env = get_env()
-    rollout_workers = 16
-    rollout_length = 100
+    rollout_workers = 25
+    rollout_length = 50
     num_envs_per = 1
 
-    batch_size = rollout_workers * rollout_length * num_envs_per
+    batch_size = 6000
     mini_batch = 8
 
     config = (
         PPOConfig()  # Version 2.5.0
         .environment(env="pk_lot", disable_env_checking=True, render_env=False)  # , env_task_fn=curriculum_fn
         .rollouts(num_rollout_workers=rollout_workers, rollout_fragment_length=rollout_length,
-                  num_envs_per_worker=num_envs_per, observation_filter=Filter)
+                  num_envs_per_worker=num_envs_per)
         .training(
             train_batch_size=batch_size,
             lr=5e-4,
@@ -106,11 +99,11 @@ if __name__ == "__main__":
             clip_param=0.3,
             grad_clip=20,
             entropy_coeff=1e-2,
-            vf_loss_coeff=0.05,  # 0.05
-            vf_clip_param=10,  # 10 (2 vehicle)
+            vf_loss_coeff=0.002,  # 0.05
+            vf_clip_param=80,  # 10 (2 vehicle)
             sgd_minibatch_size=512,
             num_sgd_iter=20,
-            model={"dim": 140, "use_lstm": False, "framestack": True,  # "post_fcnet_hiddens": [512, 512],
+            model={"dim": 140, "use_lstm": False, "framestack": True, # "post_fcnet_hiddens": [512, 512],
                    "vf_share_layers": True, "free_log_std": False,
                    "conv_filters": [[16, [16, 16], 4], [32, [4, 4], 2], [64, [4, 4], 2], [512, [9, 9], 1]]},
         )
@@ -118,8 +111,8 @@ if __name__ == "__main__":
         .framework(framework="torch")
         .resources(num_gpus=1)
         .multi_agent(
-            policies=env.possible_agents,  # {"shared_policy"},
-            policy_mapping_fn=(lambda agent_id, episode, worker, **kwargs: agent_id)  # "shared_policy")
+            policies={"shared_policy"},
+            policy_mapping_fn=(lambda agent_id, episode, worker, **kwargs: "shared_policy")  # "shared_policy")
         )
     )
 
@@ -134,7 +127,7 @@ if __name__ == "__main__":
         checkpoint_freq=10,
         local_dir="ray_results/" + env_name,
         config=config.to_dict(),
-        max_failures=-1,
+        # max_failures=-1,
         callbacks=[WandbLoggerCallback(project="confrez-ray", entity="confrez")],
-        resume=True
+        # resume=True
     )

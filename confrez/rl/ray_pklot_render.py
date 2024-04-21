@@ -17,7 +17,7 @@ from ray.rllib.algorithms.ppo import PPO, PPOConfig
 
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 
-checkpoint_path = os.path.expanduser("ray_results/pk_lot/PPO-4-randFalse-m_cycles500/PPO_pk_lot_f2d38_00000_0_2023-10-22_15-54-25/checkpoint_004730")
+checkpoint_path = os.path.expanduser("ray_results/pk_lot/PPO-4-randTrue-m_cycles500/PPO_pk_lot_75f30_00000_0_2024-04-17_14-57-19/checkpoint_002224")
 
 
 def get_env(render=False):
@@ -55,7 +55,7 @@ while True:
         agent = list(obs.keys())[num]
         current_obs = obs[agent].copy()
         action = (PPO_agent.compute_single_action
-                           (current_obs, policy_id=agent))
+                           (current_obs, policy_id='shared_policy'))
         action = np.clip(action, env.action_space(agent).low, env.action_space(agent).high)
         actions[agent] = action
     obs, reward, termination, truncation, _ = env.step(actions)
