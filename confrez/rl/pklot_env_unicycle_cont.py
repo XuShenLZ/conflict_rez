@@ -272,7 +272,7 @@ class parallel_env(ParallelEnv, EzPickle):
                     self.states[agent].e.psi = init_state[2] + orientation
 
                     self.update_vehicle_polygon(agent)
-                    if self.has_collision(agent) or np.linalg.norm([init_state[0] - self.goals[agent].x.x, init_state[1] - self.goals[agent].x.y]) < 2:
+                    if self.has_collision(agent) or np.linalg.norm([init_state[0] - self.goals[agent].x.x, init_state[1] - self.goals[agent].x.y]) < 4:
                         continue
                     else:
                         break

@@ -17,7 +17,7 @@ from ray.rllib.algorithms.ppo import PPO, PPOConfig
 
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 
-checkpoint_path = os.path.expanduser("ray_results/pk_lot/PPO-4-randTrue-m_cycles500/PPO_pk_lot_75f30_00000_0_2024-04-17_14-57-19/checkpoint_002224")
+checkpoint_path = os.path.expanduser("ray_results/pk_lot/PPO-4-randFalse-m_cycles500/PPO_pk_lot_f2d38_00000_0_2023-10-22_15-54-25/checkpoint_004650")
 
 
 def get_env(render=False):
@@ -26,7 +26,7 @@ def get_env(render=False):
         reward_stop=-10, reward_dist=-1, reward_heading=-1, reward_time=-1, reward_collision=-10, reward_goal=1000,
         window_size=140
     )
-    env = pklot_env_cont.parallel_env(n_vehicles=4, random_reset=False, render_mode="rgb_array",
+    env = pklot_env_cont.parallel_env(n_vehicles=4, random_reset=True, render_mode="rgb_array",
                                       params=env_config, max_cycles=1000)
     return env
 
@@ -51,11 +51,11 @@ obs, _ = env.reset()
 
 while True:
     actions = {}
-    for num in range(env.num_agents):
-        agent = list(obs.keys())[num]
+    for agent in env.agents:
+        # agent = list(obs.keys())[num]
         current_obs = obs[agent].copy()
         action = (PPO_agent.compute_single_action
-                           (current_obs, policy_id='shared_policy'))
+                           (current_obs, policy_id=agent))
         action = np.clip(action, env.action_space(agent).low, env.action_space(agent).high)
         actions[agent] = action
     obs, reward, termination, truncation, _ = env.step(actions)

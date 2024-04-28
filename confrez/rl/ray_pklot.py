@@ -31,7 +31,7 @@ from typing import Dict, Tuple, List
 from torch import nn
 
 n_agents = 4
-random_reset = False
+random_reset = True
 max_cycles = 500
 
 
@@ -71,15 +71,15 @@ if __name__ == "__main__":
             train_batch_size=batch_size,
             lr=5e-4,
             kl_coeff=0.2,
-            kl_target=1e-3,
+            kl_target=1e-2,
             gamma=0.99,
             lambda_=0.95,
             use_gae=True,
             clip_param=0.3,
-            grad_clip=20,
+            grad_clip=30,
             entropy_coeff=0.01,
-            vf_loss_coeff=0.002,  # 0.05
-            vf_clip_param=80,  # 10 (2 vehicle)
+            vf_loss_coeff=0.05,  # 0.05
+            vf_clip_param=120,  # 10 (2 vehicle)
             sgd_minibatch_size=512,
             num_sgd_iter=20,
             model={"dim": 140, "use_lstm": False, "framestack": True,  # "post_fcnet_hiddens": [512, 512],
