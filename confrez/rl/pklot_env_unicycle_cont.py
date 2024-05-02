@@ -252,8 +252,8 @@ class parallel_env(ParallelEnv, EzPickle):
                 y_d = 1 * self.spot_width if orientation == np.pi and goal[2] == np.pi / 2 else 0
                 x_d = 1 * self.spot_width if orientation == np.pi and goal[2] == 0 else 0
 
-                self.goals[agent].x.x = goal[0] - self.vb.wb / 2 * np.cos(goal[2]) + x_d
-                self.goals[agent].x.y = goal[1] - self.vb.wb / 2 * np.sin(goal[2]) + y_d
+                self.goals[agent].x.x = goal[0]# - self.vb.wb / 2 * np.cos(goal[2])
+                self.goals[agent].x.y = goal[1]# - self.vb.wb / 2 * np.sin(goal[2])
                 self.goals[agent].e.psi = goal[2] + orientation
 
                 while True:
@@ -267,12 +267,13 @@ class parallel_env(ParallelEnv, EzPickle):
                     y_d = 1 * self.spot_width if orientation == np.pi and goal[2] == np.pi / 2 else 0
                     x_d = 1 * self.spot_width if orientation == np.pi and goal[2] == 0 else 0
 
-                    self.states[agent].x.x = init_state[0] + x_d
-                    self.states[agent].x.y = init_state[1] + y_d
+                    self.states[agent].x.x = init_state[0] + x_d - self.vb.wb / 2 * np.cos(init_state[2])
+                    self.states[agent].x.y = init_state[1] + y_d - self.vb.wb / 2 * np.sin(init_state[2])
                     self.states[agent].e.psi = init_state[2] + orientation
 
                     self.update_vehicle_polygon(agent)
-                    if self.has_collision(agent) or np.linalg.norm([init_state[0] - self.goals[agent].x.x,                                                              init_state[1] - self.goals[agent].x.y]) < 4:
+                    if self.has_collision(agent) or np.linalg.norm([init_state[0] - self.goals[agent].x.x,
+                                                                    init_state[1] - self.goals[agent].x.y]) < 4:
                         continue
                     else:
                         break
@@ -499,7 +500,11 @@ class parallel_env(ParallelEnv, EzPickle):
         return self.action_spaces[agent]
 
     def seed(self, seed=None):
+        if seed is None:
+            return
         self.np_random, seed = seeding.np_random(seed)
+        np.random.seed(seed)
+        random.seed(seed)
 
         # Also seeding the action spaces for reproducable results
         if seed is not None:
@@ -542,6 +547,7 @@ class parallel_env(ParallelEnv, EzPickle):
         """
         state = self.states[agent]
         goal = self.goals[agent]
+        print(state.x)
 
         return np.linalg.norm([state.x.x - goal.x.x, state.x.y - goal.x.y])
 
@@ -560,7 +566,7 @@ class parallel_env(ParallelEnv, EzPickle):
         goal = self.goals[agent]
 
         if (
-            self.dist2goal(agent=agent) <= self.params.goal_r
+            self.dist2goal(agent=agent) <= self.params.goal_r * 1.5
             and self.dist_heading(agent) <= self.params.goal_y
         ):
             return True
@@ -635,11 +641,11 @@ class parallel_env(ParallelEnv, EzPickle):
 
         goal = self.goals[agent]
 
-        front_goal_x = goal.x.x + self.vb.wb * np.cos(goal.e.psi)
-        front_goal_y = goal.x.y + self.vb.wb * np.sin(goal.e.psi)
+        front_goal_x = goal.x.x + 0.5 * self.vb.wb * np.cos(goal.e.psi)
+        front_goal_y = goal.x.y + 0.5 * self.vb.wb * np.sin(goal.e.psi)
 
-        back_goal_x = goal.x.x
-        back_goal_y = goal.x.y
+        back_goal_x = goal.x.x - 0.5 * self.vb.wb * np.cos(goal.e.psi)
+        back_goal_y = goal.x.y - 0.5 * self.vb.wb * np.sin(goal.e.psi)
 
         pygame.draw.circle(
             surface=surf,
@@ -820,6 +826,7 @@ class parallel_env(ParallelEnv, EzPickle):
                 # The further the vehicle is away from the goal, the larger the penalty
                 rewards[agent] += self.params.reward_dist * self.dist2goal(agent)
 
+                rewards[agent] += self.dist_heading(agent) * self.params.reward_heading
                 infos[agent]["states"] = self.states[agent].copy()
 
             observations = {agent: self.observe(agent) for agent in self.agents}
