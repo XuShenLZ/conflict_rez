@@ -273,7 +273,7 @@ class parallel_env(ParallelEnv, EzPickle):
 
                     self.update_vehicle_polygon(agent)
                     if self.has_collision(agent) or np.linalg.norm([init_state[0] - self.goals[agent].x.x,
-                                                                    init_state[1] - self.goals[agent].x.y]) < 4:
+                                                                    init_state[1] - self.goals[agent].x.y]) < 6:
                         continue
                     else:
                         break
@@ -565,7 +565,7 @@ class parallel_env(ParallelEnv, EzPickle):
         goal = self.goals[agent]
 
         if (
-            self.dist2goal(agent=agent) <= self.params.goal_r * 1.5
+            self.dist2goal(agent=agent) <= self.params.goal_r
             and self.dist_heading(agent) <= self.params.goal_y
         ):
             return True
@@ -816,10 +816,12 @@ class parallel_env(ParallelEnv, EzPickle):
                     # If collide with other agents or walls, apply huge penalty
                     rewards[agent] += self.params.reward_collision
                     self.collisions[agent] = False
+
                 elif self.reach_goal(agent):
                     # If reach the goal without collision, the agent will be done and get huge reward
                     terminations[agent] = True
                     rewards[agent] += self.params.reward_goal
+                    self.vehicle_ps.pop(agent)
 
             for agent in self.agents:
                 # The further the vehicle is away from the goal, the larger the penalty

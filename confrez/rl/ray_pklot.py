@@ -32,7 +32,7 @@ from torch import nn
 
 n_agents = 1
 random_reset = True
-max_cycles = 200
+max_cycles = 250
 
 
 def get_env(render=False):
@@ -56,8 +56,8 @@ if __name__ == "__main__":
     env_name = "pk_lot"
     env = get_env()
     rollout_workers = 28
-    rollout_length = 10
-    num_envs_per = 2
+    rollout_length = 50
+    num_envs_per = 1
 
     batch_size = rollout_workers * rollout_length * num_envs_per * 5
     mini_batch = 8
@@ -79,7 +79,7 @@ if __name__ == "__main__":
             grad_clip=20,
             entropy_coeff=0.01,
             vf_loss_coeff=0.002,  # 0.05
-            vf_clip_param=40,  # 10 (2 vehicle)
+            vf_clip_param=60,  # 10 (2 vehicle)
             sgd_minibatch_size=512,
             num_sgd_iter=20,
             model={"dim": 140, "use_lstm": False, "framestack": True,  # "post_fcnet_hiddens": [512, 512],
