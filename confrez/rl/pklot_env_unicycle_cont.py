@@ -267,8 +267,8 @@ class parallel_env(ParallelEnv, EzPickle):
                     y_d = 1 * self.spot_width if orientation == np.pi and goal[2] == np.pi / 2 else 0
                     x_d = 1 * self.spot_width if orientation == np.pi and goal[2] == 0 else 0
 
-                    self.states[agent].x.x = init_state[0] + x_d - self.vb.wb / 2 * np.cos(init_state[2])
-                    self.states[agent].x.y = init_state[1] + y_d - self.vb.wb / 2 * np.sin(init_state[2])
+                    self.states[agent].x.x = init_state[0] + x_d #- self.vb.wb / 2 * np.cos(init_state[2])
+                    self.states[agent].x.y = init_state[1] + y_d #sssss- self.vb.wb / 2 * np.sin(init_state[2])
                     self.states[agent].e.psi = init_state[2] + orientation
 
                     self.update_vehicle_polygon(agent)
@@ -547,7 +547,6 @@ class parallel_env(ParallelEnv, EzPickle):
         """
         state = self.states[agent]
         goal = self.goals[agent]
-        print(state.x)
 
         return np.linalg.norm([state.x.x - goal.x.x, state.x.y - goal.x.y])
 

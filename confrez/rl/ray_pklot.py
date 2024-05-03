@@ -30,9 +30,9 @@ import random
 from typing import Dict, Tuple, List
 from torch import nn
 
-n_agents = 4
+n_agents = 1
 random_reset = True
-max_cycles = 500
+max_cycles = 200
 
 
 def get_env(render=False):
@@ -56,8 +56,8 @@ if __name__ == "__main__":
     env_name = "pk_lot"
     env = get_env()
     rollout_workers = 28
-    rollout_length = 50
-    num_envs_per = 1
+    rollout_length = 10
+    num_envs_per = 2
 
     batch_size = rollout_workers * rollout_length * num_envs_per * 5
     mini_batch = 8
@@ -71,15 +71,15 @@ if __name__ == "__main__":
             train_batch_size=batch_size,
             lr=5e-4,
             kl_coeff=0.2,
-            kl_target=1e-2,
+            kl_target=1e-3,
             gamma=0.99,
             lambda_=0.95,
             use_gae=True,
             clip_param=0.3,
-            grad_clip=30,
+            grad_clip=20,
             entropy_coeff=0.01,
-            vf_loss_coeff=0.05,  # 0.05
-            vf_clip_param=120,  # 10 (2 vehicle)
+            vf_loss_coeff=0.002,  # 0.05
+            vf_clip_param=40,  # 10 (2 vehicle)
             sgd_minibatch_size=512,
             num_sgd_iter=20,
             model={"dim": 140, "use_lstm": False, "framestack": True,  # "post_fcnet_hiddens": [512, 512],
@@ -90,8 +90,9 @@ if __name__ == "__main__":
         .framework(framework="torch")
         .resources(num_gpus=1)
         .multi_agent(
-            policies={"shared_policy"}, #env.possible_agents,  
-            policy_mapping_fn=(lambda agent_id, episode, worker, **kwargs: "shared_policy") #lambda agent_id, episode, worker, **kwargs: agent_id)  
+            policies={"shared_policy"},  # env.possible_agents,
+            policy_mapping_fn=(lambda agent_id, episode, worker, **kwargs: "shared_policy")
+            # lambda agent_id, episode, worker, **kwargs: agent_id)
         )
     )
 
