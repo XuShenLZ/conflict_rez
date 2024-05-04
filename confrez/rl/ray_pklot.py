@@ -78,7 +78,7 @@ if __name__ == "__main__":
             clip_param=0.3,
             grad_clip=20,
             entropy_coeff=0.01,
-            vf_loss_coeff=0.002,  # 0.05
+            vf_loss_coeff=0.01,  # 0.05
             vf_clip_param=40,  # 10 (2 vehicle)
             sgd_minibatch_size=512,
             num_sgd_iter=20,

@@ -765,7 +765,7 @@ class parallel_env(ParallelEnv, EzPickle):
             return observations
         else:
             infos = {
-                agent: {"states": self.states[agent].copy()} for agent in self.agents
+                agent: {"states": observations[agent].copy()} for agent in self.agents
             }
 
             return observations, infos
@@ -828,7 +828,7 @@ class parallel_env(ParallelEnv, EzPickle):
                 rewards[agent] += self.params.reward_dist * self.dist2goal(agent)
 
                 rewards[agent] += self.dist_heading(agent) * self.params.reward_heading
-                infos[agent]["states"] = self.states[agent].copy()
+                infos[agent]["states"] = self.observe(agent)
 
             observations = {agent: self.observe(agent) for agent in self.agents}
 
