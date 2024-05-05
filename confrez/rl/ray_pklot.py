@@ -60,7 +60,7 @@ if __name__ == "__main__":
     num_envs_per = 1
 
     batch_size = rollout_workers * rollout_length * num_envs_per * 5
-    mini_batch = 8
+    mini_batch = 4
 
     config = (
         PPOConfig()  # Version 2.5.0
@@ -69,21 +69,21 @@ if __name__ == "__main__":
                   num_envs_per_worker=num_envs_per)
         .training(
             train_batch_size=batch_size,
-            lr=5e-4,
+            lr=1e-4,
             kl_coeff=0.2,
             kl_target=1e-3,
             gamma=0.99,
             lambda_=0.95,
             use_gae=True,
-            clip_param=0.3,
+            clip_param=0.2,
             grad_clip=20,
             entropy_coeff=0.01,
-            vf_loss_coeff=0.002,  # 0.05
+            vf_loss_coeff=1,  # 0.05
             vf_clip_param=40,  # 10 (2 vehicle)
-            sgd_minibatch_size=512,
-            num_sgd_iter=20,
+            sgd_minibatch_size=batch_size // mini_batch,
+            num_sgd_iter=10,
             model={"dim": 140, "use_lstm": False, "framestack": True,  # "post_fcnet_hiddens": [512, 512],
-                   "vf_share_layers": True, "free_log_std": False,
+                   "vf_share_layers": False, "free_log_std": False,
                    "conv_filters": [[16, [16, 16], 4], [32, [4, 4], 2], [64, [4, 4], 2], [512, [9, 9], 1]]},
         )
         .debugging(log_level="INFO")
