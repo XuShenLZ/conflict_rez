@@ -32,7 +32,7 @@ from torch import nn
 
 n_agents = 1
 random_reset = True
-max_cycles = 250
+max_cycles = 200
 
 
 def get_env(render=False):
@@ -55,35 +55,35 @@ if __name__ == "__main__":
     register_env("pk_lot", lambda config: ParallelPettingZooEnv(get_env()))
     env_name = "pk_lot"
     env = get_env()
-    rollout_workers = 28
+    rollout_workers = 24
     rollout_length = 50
-    num_envs_per = 1
+    num_envs_per = 4
 
-    batch_size = rollout_workers * rollout_length * num_envs_per * 5
+    batch_size = rollout_workers * rollout_length * num_envs_per
     mini_batch = 4
 
     config = (
         PPOConfig()  # Version 2.5.0
         .environment(env="pk_lot", disable_env_checking=True, render_env=False)  # , env_task_fn=curriculum_fn
-        .rollouts(num_rollout_workers=rollout_workers, rollout_fragment_length=rollout_length,
+        .rollouts(num_rollout_workers=rollout_workers, rollout_fragment_length='auto',
                   num_envs_per_worker=num_envs_per)
         .training(
-            train_batch_size=batch_size,
-            lr=1e-4,
+            train_batch_size=6800,
+            lr=1e-5,
             kl_coeff=0.2,
-            kl_target=1e-3,
+            kl_target=5e-3,
             gamma=0.99,
             lambda_=0.95,
             use_gae=True,
-            clip_param=0.2,
-            grad_clip=20,
-            entropy_coeff=0.01,
-            vf_loss_coeff=1,  # 0.05
-            vf_clip_param=40,  # 10 (2 vehicle)
-            sgd_minibatch_size=batch_size // mini_batch,
+            clip_param=0.5,
+            grad_clip=0.5,
+            entropy_coeff=0.0,
+            vf_loss_coeff=0.5,  # 0.05
+            vf_clip_param=10,  # 10 (2 vehicle)
+            sgd_minibatch_size=128,
             num_sgd_iter=10,
-            model={"dim": 140, "use_lstm": False, "framestack": True,  # "post_fcnet_hiddens": [512, 512],
-                   "vf_share_layers": False, "free_log_std": False,
+            model={"dim": 140, "use_lstm": False, "framestack": True,  "post_fcnet_hiddens": [128, 128],
+                   "vf_share_layers": False, "free_log_std": True,
                    "conv_filters": [[16, [16, 16], 4], [32, [4, 4], 2], [64, [4, 4], 2], [512, [9, 9], 1]]},
         )
         .debugging(log_level="INFO")

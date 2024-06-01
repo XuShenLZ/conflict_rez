@@ -34,8 +34,8 @@ import random
 from typing import Dict, Tuple, List
 from torch import nn
 
-n_agents = 4
-random_reset = False
+n_agents = 1
+random_reset = True
 max_cycles = 200
 
 
@@ -50,16 +50,16 @@ def explore(config):
 
 
 hyperparam_mutations = {
-    "gamma": [0.9, 0.99],
-    "lambda_":[0.95, 0.995],
-    "clip_param": lambda: random.uniform(0.01, 0.5),
+    "gamma": lambda: random.uniform(0.9, 0.99),
+    "lambda_": lambda: random.uniform(0.95, 0.995),
+    "clip_param": lambda: random.uniform(0.1, 0.5),
     "lr": [1e-3, 5e-4, 1e-4, 5e-5, 1e-5],
-    "kl_target": [1e-5, 1e-4, 1e-3, 1e-2],
-    "kl_coeff": [0, 0.2, 1, 3],
-    "num_sgd_iter": lambda: random.randint(1, 30),
+    "kl_target": lambda: random.uniform(1e-3, 1e-2),
+    "kl_coeff": [0.2, 0.1, 0.02, 0.05],
+    "num_sgd_iter": lambda: random.randint(1, 20),
     "vf_clip_param": lambda: random.randint(2, 64),
-    "vf_loss_coeff": lambda: random.uniform(0.001, 4),
-    "entropy_coeff": [0, 1e-3, 1e-4, 1e-5]
+    "vf_loss_coeff": lambda: random.uniform(0.1, 5),
+    "entropy_coeff": [1e-2, 1e-3, 1e-4, 1e-1]
 }
 
 pbt = PopulationBasedTraining(
@@ -75,19 +75,11 @@ pbt = PopulationBasedTraining(
 def get_env(render=False):
     """This function is needed to provide callables for DummyVectorEnv."""
     env_config = pklot_env_cont.EnvParams(
-        reward_stop=-1, reward_dist=-0.1, reward_heading=-0.1, reward_time=-0.1, reward_collision=-10, reward_goal=100,
-        # eps=1e-3
+        reward_stop=-10, reward_dist=-1, reward_heading=-1, reward_time=-1, reward_collision=-10, reward_goal=1000,
+        window_size=140
     )
     env = pklot_env_cont.parallel_env(n_vehicles=n_agents, random_reset=random_reset, render_mode="rgb_array",
                                       params=env_config, max_cycles=max_cycles)
-
-    # env = ss.sticky_actions_v0(env, repeat_action_probability=0.05)
-    # env = ss.frame_skip_v0(env, num_frames=1)
-    # env = ss.color_reduction_v0(env)
-    # env = ss.frame_stack_v2(env)
-    env = ss.black_death_v3(env)
-    env = ss.clip_actions_v0(env)
-    env = ss.resize_v1(env, 84, 84)
 
     return env
 
@@ -100,36 +92,37 @@ if __name__ == "__main__":
     register_env("pk_lot", lambda config: ParallelPettingZooEnv(get_env()))
     env_name = "pk_lot"
     env = get_env()
-    num_samples = 3
-    rollout_workers = 1
-    rollout_length = max_cycles
-    num_envs_per = 8
-    num_gpus = 0.6 / num_samples
+    num_samples = 4
+    rollout_workers = 7
+    rollout_length = 25
+    num_envs_per = 4
+    num_gpus = 0.9 / num_samples
 
-    batch_size = rollout_workers * rollout_length * num_envs_per
+    batch_size = rollout_workers * rollout_length * num_envs_per * 5
     mini_batch = 4
 
     config = (
         PPOConfig()
-        .environment(env="pk_lot")  # , env_task_fn=curriculum_fn)
+        .environment(env="pk_lot", disable_env_checking=True)  # , env_task_fn=curriculum_fn)
         .rollouts(num_rollout_workers=rollout_workers, rollout_fragment_length=rollout_length,
-                  num_envs_per_worker=num_envs_per, observation_filter="MeanStdFilter")
+                  num_envs_per_worker=num_envs_per)
         .training(
             train_batch_size=batch_size,
             lr=tune.choice([1e-3, 5e-4, 1e-4, 5e-5, 1e-5]),
-            kl_coeff=tune.choice([0.2, 1]),
-            kl_target=tune.choice([1e-4, 1e-3]),
-            gamma=tune.choice([0.9, 0.99]),
-            lambda_=tune.choice([0.95, 0.995]),
+            kl_coeff=tune.choice([0.2, 1, 0.1, 0.05]),
+            kl_target=tune.choice([1e-4, 1e-3, 1e-2]),
+            gamma=tune.choice([0.9, 0.99, 0.95]),
+            lambda_=tune.choice([0.95, 0.995, 0.99, 0.97]),
             clip_param=tune.choice([0.2, 0.3, 0.4]),
             grad_clip=tune.choice([5, 10, 15, 20]),
-            entropy_coeff=tune.choice([0, 1e-3, 1e-4]),
+            entropy_coeff=tune.choice([0, 1e-3, 1e-4, 1e-2, 1e-1]),
             vf_loss_coeff=tune.choice([1, 0.5, 0.1, 0.05, 0.01]),
             vf_clip_param=tune.choice([10, 20, 32, 64]),
             sgd_minibatch_size=batch_size // mini_batch,
-            num_sgd_iter=tune.choice([10, 15, 20]),
-            model={"dim": 84, "use_lstm": False, "framestack": True, 
-                   "vf_share_layers": False, "free_log_std": False},
+            num_sgd_iter=tune.choice([5, 10, 15, 20]),
+            model={"dim": 140, "use_lstm": False, "framestack": True,  # "post_fcnet_hiddens": [512, 512],
+                   "vf_share_layers": False, "free_log_std": False,
+                   "conv_filters": [[16, [16, 16], 4], [32, [4, 4], 2], [64, [4, 4], 2], [512, [9, 9], 1]]},
         )
         .debugging(log_level="INFO")
         .framework(framework="torch")

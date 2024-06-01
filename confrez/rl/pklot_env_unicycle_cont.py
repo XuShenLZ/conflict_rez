@@ -20,6 +20,7 @@ from confrez.obstacle_types import GeofenceRegion
 from confrez.pytypes import PythonMsg, VehicleState
 from confrez.vehicle_types import VehicleConfig, VehicleBody
 from confrez.dynamic_model import unicycle_simulator
+import cv2
 
 
 @dataclass
@@ -108,6 +109,7 @@ class parallel_env(ParallelEnv, EzPickle):
         self.dt = self.params.dt
 
         self.possible_agents = ["vehicle_" + str(i) for i in range(self.n_vehicles)]
+        self._agent_ids = self.possible_agents.copy()
         self.agent_name_mapping = dict(
             zip(self.possible_agents, list(range(self.n_vehicles)))
         )
@@ -150,7 +152,7 @@ class parallel_env(ParallelEnv, EzPickle):
         )
         self.possible_angles = [0, np.pi / 2, np.pi, -np.pi / 2]
         self.possible_x = np.linspace(2, 12, num=20)
-        self.possible_y = np.linspace(4, 10, num=20)
+        self.possible_y = np.linspace(4, 8, num=20)
         self.possible_goals = np.linspace(3.5, 8.5, num=6, endpoint=True)
 
         # ======== Initial and final states of all agents
@@ -199,7 +201,7 @@ class parallel_env(ParallelEnv, EzPickle):
 
         self.init_walls()
         self.collisions = {agent_id: False for agent_id in self.possible_agents}
-        self._agent_ids = set(self.possible_agents[:])
+        # self._agent_ids = set(self.possible_agents[:])
 
     def g2i(self, x: float, y: float) -> Tuple[float, float]:
         """
@@ -692,8 +694,10 @@ class parallel_env(ParallelEnv, EzPickle):
         observation = pygame.surfarray.pixels3d(surf)
         observation = np.rot90(observation, k=3)
         observation = np.fliplr(observation)
+        if self.resize is not None:
+            observation = cv2.resize(observation, dsize=self.resize)
 
-        return (observation / 256).astype(np.float16)
+        return observation.astype(np.uint8) #(observation / 256).astype(np.float16)
 
     def enable_render(self):
         """
