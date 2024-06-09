@@ -32,17 +32,17 @@ from torch import nn
 
 n_agents = 1
 random_reset = True
-max_cycles = 200
+max_cycles = 500
 
 
 def get_env(render=False):
     """This function is needed to provide callables for DummyVectorEnv."""
     env_config = pklot_env_cont.EnvParams(
         reward_stop=-10, reward_dist=-1, reward_heading=-1, reward_time=-1, reward_collision=-10, reward_goal=1000,
-        window_size=140
+        window_size=84
     )
     env = pklot_env_cont.parallel_env(n_vehicles=n_agents, random_reset=random_reset, render_mode="rgb_array",
-                                      params=env_config, max_cycles=max_cycles)
+                                      params=env_config, max_cycles=max_cycles, return_scaled=True)
 
     return env
 
@@ -68,23 +68,24 @@ if __name__ == "__main__":
         .rollouts(num_rollout_workers=rollout_workers, rollout_fragment_length='auto',
                   num_envs_per_worker=num_envs_per)
         .training(
-            train_batch_size=6800,
-            lr=1e-5,
+            train_batch_size=40000,
+            lr=1e-3,
+            # lr_schedule=[[0, 1e-5], [1e6, 1e-4], [2e6, 1e-3], [3e6, 1e-2]],
             kl_coeff=0.2,
-            kl_target=5e-3,
+            kl_target=1e-4,
             gamma=0.99,
-            lambda_=0.95,
+            lambda_=0.9,
             use_gae=True,
-            clip_param=0.5,
-            grad_clip=0.5,
+            clip_param=0.1,
+            grad_clip=0.1,
             entropy_coeff=0.0,
-            vf_loss_coeff=0.5,  # 0.05
-            vf_clip_param=10,  # 10 (2 vehicle)
-            sgd_minibatch_size=128,
-            num_sgd_iter=10,
-            model={"dim": 140, "use_lstm": False, "framestack": True,  "post_fcnet_hiddens": [128, 128],
-                   "vf_share_layers": False, "free_log_std": True,
-                   "conv_filters": [[16, [16, 16], 4], [32, [4, 4], 2], [64, [4, 4], 2], [512, [9, 9], 1]]},
+            vf_loss_coeff=2.0,  # 0.05
+            vf_clip_param=100,  # 10 (2 vehicle)
+            sgd_minibatch_size=512,
+            num_sgd_iter=30,
+            model={"dim": 84, "use_lstm": False, "framestack": True, # "post_fcnet_hiddens": [128, 128],
+                   "vf_share_layers": False, "free_log_std": False,}
+                   # "conv_filters": [[16, [16, 16], 4], [32, [4, 4], 2], [64, [4, 4], 2], [512, [9, 9], 1]]},
         )
         .debugging(log_level="INFO")
         .framework(framework="torch")

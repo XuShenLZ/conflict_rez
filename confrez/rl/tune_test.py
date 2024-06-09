@@ -34,14 +34,14 @@ if __name__ == "__main__":
     RAY_memory_monitor_refresh_ms = 0
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--max", type=int, default=5000000)
+    parser.add_argument("--max", type=int, default=3000000)
     parser.add_argument("--algo", type=str, default="PPO")
     parser.add_argument("--num_workers", type=int, default=4)
     parser.add_argument("--num_samples", type=int, default=6)
     parser.add_argument("--t_ready", type=int, default=30000)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
-        "--horizon", type=int, default=400
+        "--horizon", type=int, default=500
     )  # make this 1000 for other envs
     parser.add_argument("--perturb", type=float, default=0.25)  # if using PBT
     parser.add_argument("--env_name", type=str, default="pk_lot")
@@ -97,6 +97,7 @@ if __name__ == "__main__":
             "vf_clip_param": lambda: random.randint(10, 100),
             "grad_clip": lambda: random.choice(np.logspace(-1, 1.3, 50)),
             "entropy_coeff": lambda: random.uniform(0, 1e-2),
+            "vf_loss_coeff": lambda: random.uniform(0.1, 2),
         },
         custom_explore_fn=explore,
     )
@@ -117,7 +118,8 @@ if __name__ == "__main__":
             "sgd_minibatch_size": [32, 512],
             "vf_clip_param": [10, 100],
             "grad_clip": [0.1, 20],
-            "entropy_coeff": [0, 1e-2]
+            "entropy_coeff": [0, 1e-2],
+            "vf_loss_coeff": [0.1, 2],
         },
     )
 
@@ -164,12 +166,13 @@ if __name__ == "__main__":
                 #     int(args.net.split("_")[1]),
                 # ],
                 "free_log_std": False,
+                "framestack": True,
                 # "conv_filters": [[16, [16, 16], 4], [32, [4, 4], 2], [64, [4, 4], 2], [512, [9, 9], 1]],
             },
             # "sgd_minibatch_size": 128,
             "num_sgd_iter": sample_from(lambda spec: random.randint(5, 30)),
             "sgd_minibatch_size": sample_from(lambda spec: random.randint(32, 512)),
-            "kl_target": 1e-3,
+            "kl_target": 1e-4,
             "vf_clip_param": sample_from(lambda spec: random.randint(10, 100)),
             "grad_clip": sample_from(lambda spec: random.choice(np.logspace(-1, 1.3, 50))),
             "lambda": sample_from(lambda spec: random.uniform(0.9, 1.0)),
@@ -177,6 +180,7 @@ if __name__ == "__main__":
             "lr": sample_from(lambda spec: random.uniform(1e-3, 1e-5)),
             "entropy_coeff": sample_from(lambda spec: random.uniform(0, 1e-2)),
             "train_batch_size": sample_from(lambda spec: random.randint(1000, 40000)),
+            "vf_loss_coeff": sample_from(lambda spec: random.uniform(0.1, 2)),
         },
         max_failures=-1
     )
