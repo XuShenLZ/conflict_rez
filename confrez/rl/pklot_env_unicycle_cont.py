@@ -116,6 +116,7 @@ class parallel_env(ParallelEnv, EzPickle):
             zip(self.possible_agents, list(range(self.n_vehicles)))
         )
         self.random_reset = random_reset
+        self.prev_dist = {agent: None for agent in self.possible_agents}
 
         self.vb = VehicleBody()
         self.vehicle_config = VehicleConfig()
@@ -769,6 +770,7 @@ class parallel_env(ParallelEnv, EzPickle):
 
         self.draw_walls()
         self.agents = self.possible_agents[:]
+        self.prev_dist = {agent: None for agent in self.possible_agents}
 
         observations = {agent: self.observe(agent) for agent in self.agents}
 
@@ -812,7 +814,7 @@ class parallel_env(ParallelEnv, EzPickle):
                 if self.has_collision(agent):
                     # TODO: Potentially change but leaving it for now
                     self.collisions[agent] = True
-                    self.move(agent=agent, action=-actions[agent])
+                    self.move(agent=agent, action=-np.asarray(actions[agent]))
 
             # Check collision or goal completion and apply costs
             for agent in self.agents:
@@ -836,7 +838,9 @@ class parallel_env(ParallelEnv, EzPickle):
 
             for agent in self.agents:
                 # The further the vehicle is away from the goal, the larger the penalty
-                rewards[agent] += self.params.reward_dist * self.dist2goal(agent)
+                if self.prev_dist[agent] is not None:
+                    rewards[agent] += self.params.reward_dist * (self.dist2goal(agent) - self.prev_dist[agent])
+                self.prev_dist[agent] = self.dist2goal(agent)
 
                 # Start taking into account the heading of the car once its close enough to the goal
                 if self.dist2goal(agent) < 2:

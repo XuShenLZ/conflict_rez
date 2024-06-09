@@ -8,7 +8,7 @@ import pygame
 from pygame.locals import *
 
 env_config = pklot_env_cont.EnvParams(
-    reward_stop=-10, reward_dist=-1, reward_heading=0, reward_time=-1, reward_collision=-10, reward_goal=10000,
+    reward_stop=-10, reward_dist=-1, reward_heading=-1, reward_time=-1, reward_collision=-10, reward_goal=100,
     window_size=500
 )
 env = raw_env(n_vehicles=1, render_mode='human', random_reset=True, params=env_config, max_cycles=2000)
