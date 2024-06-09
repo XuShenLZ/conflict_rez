@@ -154,4 +154,5 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-*/ray_results/
+confrez/rl/ray_results/
+.idea/
