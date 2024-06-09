@@ -92,9 +92,11 @@ class parallel_env(ParallelEnv, EzPickle):
         render_mode="human",
         resize=None,
         params=EnvParams(),
+        return_scaled=False,
     ):
         EzPickle.__init__(self, n_vehicles, max_cycles)
         ParallelEnv.__init__(self)
+        self.return_scaled = return_scaled
         self.resize = resize
         self.render_mode = render_mode
         self.n_vehicles = n_vehicles
@@ -274,8 +276,9 @@ class parallel_env(ParallelEnv, EzPickle):
                     self.states[agent].e.psi = init_state[2] + orientation
 
                     self.update_vehicle_polygon(agent)
-                    if self.has_collision(agent) or np.linalg.norm([init_state[0] - self.goals[agent].x.x,
-                                                                    init_state[1] - self.goals[agent].x.y]) < 6:
+                    if self.has_collision(agent) \
+                        or np.linalg.norm([init_state[0] - self.goals[agent].x.x, init_state[1] - self.goals[agent].x.y]) < 1 \
+                        or np.linalg.norm([init_state[0] - self.goals[agent].x.x, init_state[1] - self.goals[agent].x.y]) > 6:
                         continue
                     else:
                         break
@@ -697,7 +700,11 @@ class parallel_env(ParallelEnv, EzPickle):
         if self.resize is not None:
             observation = cv2.resize(observation, dsize=self.resize)
 
-        return observation.astype(np.uint8) #(observation / 256).astype(np.float16)
+        if self.return_scaled:
+            return (observation / 256).astype(np.float16)
+        else:
+            return observation.astype(np.uint8)
+
 
     def enable_render(self):
         """
@@ -831,7 +838,10 @@ class parallel_env(ParallelEnv, EzPickle):
                 # The further the vehicle is away from the goal, the larger the penalty
                 rewards[agent] += self.params.reward_dist * self.dist2goal(agent)
 
-                rewards[agent] += self.dist_heading(agent) * self.params.reward_heading
+                # Start taking into account the heading of the car once its close enough to the goal
+                if self.dist2goal(agent) < 2:
+                    rewards[agent] += self.dist_heading(agent) * self.params.reward_heading
+
                 infos[agent]["states"] = self.states[agent].copy()
 
             observations = {agent: self.observe(agent) for agent in self.agents}
