@@ -24,6 +24,7 @@ events.out.tfevents*
 # IDE
 .vscode/
 .DS_Store
+.idea/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -154,3 +155,5 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+ray_results/
