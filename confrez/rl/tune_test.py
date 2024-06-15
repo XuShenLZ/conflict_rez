@@ -15,7 +15,7 @@ import ray
 
 
 n_agents = 1
-random_reset = True
+random_reset = False
 
 
 # Postprocess the perturbed config to ensure it's still valid used if PBT.
@@ -34,10 +34,10 @@ if __name__ == "__main__":
     RAY_memory_monitor_refresh_ms = 0
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--max", type=int, default=3000000)
+    parser.add_argument("--max", type=int, default=1000000)
     parser.add_argument("--algo", type=str, default="PPO")
-    parser.add_argument("--num_workers", type=int, default=4)
-    parser.add_argument("--num_samples", type=int, default=6)
+    parser.add_argument("--num_workers", type=int, default=9)
+    parser.add_argument("--num_samples", type=int, default=3)
     parser.add_argument("--t_ready", type=int, default=30000)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
@@ -61,7 +61,7 @@ if __name__ == "__main__":
     def get_env(render=False):
         """This function is needed to provide callables for DummyVectorEnv."""
         env_config = pklot_env_cont.EnvParams(
-            reward_stop=-10, reward_dist=-1, reward_heading=0, reward_time=-1, reward_collision=-10, reward_goal=1000,
+            reward_stop=-10, reward_dist=1, reward_heading=0, reward_time=-1, reward_collision=-10, reward_goal=100,
             window_size=84
         )
         env = pklot_env_cont.parallel_env(n_vehicles=n_agents, random_reset=random_reset, render_mode="rgb_array",
