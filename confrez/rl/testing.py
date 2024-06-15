@@ -8,14 +8,12 @@ import pygame
 from pygame.locals import *
 
 env_config = pklot_env_cont.EnvParams(
-    reward_stop=-5, reward_dist=-0.1, reward_heading=-0.1, reward_time=-0.1, reward_collision=-10, reward_goal=100,
+    reward_stop=-10, reward_dist=10, reward_heading=-1, reward_time=-1, reward_collision=-10, reward_goal=100,
     window_size=500
 )
 env = raw_env(n_vehicles=1, render_mode='human', random_reset=True, params=env_config, max_cycles=2000)
-env = ss.black_death_v3(env)
-env = ss.clip_actions_v0(env)
 
-observations = env.reset(seed=20)
+observations = env.reset()
 
 frame_list = []
 done, trunc = False, False
@@ -23,7 +21,7 @@ step = 0
 
 # for _ in range(10):
 #     env.reset()
-
+total_rew = 0
 while False in env.terminations.values():
     agent = env.agent_selection
     step += 1
@@ -61,11 +59,13 @@ while False in env.terminations.values():
     env.render()
 
     _, reward, done, trunc, _ = env.last()
+    total_rew += reward
     # img = Image.fromarray(env.render())
     # frame_list.append(img)
     print(f"step: {step}, {reward}")
     # sleep(0.1)
 
-frame_list[0].save(
-    "out.gif", save_all=True, append_images=frame_list[1:], duration=3, loop=0
-)
+print(f"total_reward {total_rew}")
+# frame_list[0].save(
+#     "out.gif", save_all=True, append_images=frame_list[1:], duration=3, loop=0
+# )
