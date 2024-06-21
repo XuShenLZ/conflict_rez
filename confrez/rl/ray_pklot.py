@@ -38,7 +38,7 @@ max_cycles = 500
 def get_env(render=False):
     """This function is needed to provide callables for DummyVectorEnv."""
     env_config = pklot_env_cont.EnvParams(
-        reward_stop=-10, reward_dist=-1, reward_heading=-1, reward_time=-1, reward_collision=-10, reward_goal=1000,
+        reward_stop=-10, reward_dist=10, reward_heading=-1, reward_time=-1, reward_collision=-10, reward_goal=1000,
         window_size=84
     )
     env = pklot_env_cont.parallel_env(n_vehicles=n_agents, random_reset=random_reset, render_mode="rgb_array",
@@ -55,7 +55,7 @@ if __name__ == "__main__":
     register_env("pk_lot", lambda config: ParallelPettingZooEnv(get_env()))
     env_name = "pk_lot"
     env = get_env()
-    rollout_workers = 24
+    rollout_workers = 28
     rollout_length = 50
     num_envs_per = 4
 
@@ -69,16 +69,16 @@ if __name__ == "__main__":
                   num_envs_per_worker=num_envs_per)
         .training(
             train_batch_size=40000,
-            lr=1e-3,
+            lr=1e-5,
             # lr_schedule=[[0, 1e-5], [1e6, 1e-4], [2e6, 1e-3], [3e6, 1e-2]],
             kl_coeff=0.2,
-            kl_target=1e-4,
-            gamma=0.99,
+            kl_target=1e-3,
+            gamma=0.9,
             lambda_=0.9,
             use_gae=True,
             clip_param=0.1,
             grad_clip=0.1,
-            entropy_coeff=0.0,
+            entropy_coeff=0.01,
             vf_loss_coeff=2.0,  # 0.05
             vf_clip_param=100,  # 10 (2 vehicle)
             sgd_minibatch_size=512,
@@ -100,14 +100,14 @@ if __name__ == "__main__":
     results = tune.run(
         "PPO",
         name=f"PPO-{n_agents}-rand{random_reset}-m_cycles{max_cycles}",
-        # + "/PPO_pk_lot_28df8_00000_0_2023-09-11_14-50-01",
         verbose=0,
         metric="episode_reward_mean",
         mode="max",
-        stop={"episode_reward_mean": 20},
+        # stop={"episode_reward_mean": 20},
         checkpoint_freq=20,
         local_dir="ray_results/" + env_name,
         config=config.to_dict(),
         # max_failures=-1,
         callbacks=[WandbLoggerCallback(project="confrez-ray", entity="confrez")],
+        resume=True
     )

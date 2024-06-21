@@ -278,8 +278,8 @@ class parallel_env(ParallelEnv, EzPickle):
 
                     self.update_vehicle_polygon(agent)
                     if self.has_collision(agent) \
-                        or np.linalg.norm([init_state[0] - self.goals[agent].x.x, init_state[1] - self.goals[agent].x.y]) < 1 \
-                        or np.linalg.norm([init_state[0] - self.goals[agent].x.x, init_state[1] - self.goals[agent].x.y]) > 6:
+                        or np.linalg.norm([init_state[0] - self.goals[agent].x.x, init_state[1] - self.goals[agent].x.y]) < 4:
+                        # or np.linalg.norm([init_state[0] - self.goals[agent].x.x, init_state[1] - self.goals[agent].x.y]) > 6:
                         continue
                     else:
                         break
@@ -843,7 +843,7 @@ class parallel_env(ParallelEnv, EzPickle):
                 self.prev_dist[agent] = self.dist2goal(agent)
 
                 # Start taking into account the heading of the car once its close enough to the goal
-                if self.dist2goal(agent) < 2:
+                if self.dist2goal(agent) < 4:
                     rewards[agent] += self.dist_heading(agent) * self.params.reward_heading
 
                 infos[agent]["states"] = self.states[agent].copy()

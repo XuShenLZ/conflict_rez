@@ -11,6 +11,8 @@ from ray.tune import run, sample_from, register_env
 from ray.tune.schedulers import PopulationBasedTraining
 from ray.tune.schedulers.pb2 import PB2
 import pklot_env_unicycle_cont as pklot_env_cont
+from ray.air.integrations.wandb import WandbLoggerCallback
+
 import ray
 
 
@@ -34,7 +36,7 @@ if __name__ == "__main__":
     RAY_memory_monitor_refresh_ms = 0
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--max", type=int, default=1000000)
+    parser.add_argument("--max", type=int, default=5000000)
     parser.add_argument("--algo", type=str, default="PPO")
     parser.add_argument("--num_workers", type=int, default=9)
     parser.add_argument("--num_samples", type=int, default=3)
@@ -61,11 +63,11 @@ if __name__ == "__main__":
     def get_env(render=False):
         """This function is needed to provide callables for DummyVectorEnv."""
         env_config = pklot_env_cont.EnvParams(
-            reward_stop=-10, reward_dist=1, reward_heading=0, reward_time=-1, reward_collision=-10, reward_goal=100,
+            reward_stop=-10, reward_dist=10, reward_heading=0, reward_time=-1, reward_collision=-10, reward_goal=1000,
             window_size=84
         )
         env = pklot_env_cont.parallel_env(n_vehicles=n_agents, random_reset=random_reset, render_mode="rgb_array",
-                                          params=env_config, max_cycles=args.horizon, seed=args.seed)
+                                          params=env_config, max_cycles=args.horizon, seed=args.seed, return_scaled=True)
 
         return env
 
@@ -91,13 +93,14 @@ if __name__ == "__main__":
             "lambda": lambda: random.uniform(0.9, 1.0),
             "clip_param": lambda: random.uniform(0.1, 0.5),
             "lr": lambda: random.uniform(1e-3, 1e-5),
-            "train_batch_size": lambda: random.randint(1000, 40000),
+            "train_batch_size": lambda: random.randint(1000, 20000),
             "num_sgd_iter": lambda: random.randint(5, 30),
             "sgd_minibatch_size": lambda: random.randint(32, 512),
             "vf_clip_param": lambda: random.randint(10, 100),
             "grad_clip": lambda: random.choice(np.logspace(-1, 1.3, 50)),
             "entropy_coeff": lambda: random.uniform(0, 1e-2),
             "vf_loss_coeff": lambda: random.uniform(0.1, 2),
+            "gamma": lambda: random.uniform(0.9, 0.999),
         },
         custom_explore_fn=explore,
     )
@@ -113,13 +116,14 @@ if __name__ == "__main__":
             "lambda": [0.9, 1.0],
             "clip_param": [0.1, 0.5],
             "lr": [1e-5, 1e-3],
-            "train_batch_size": [1000, 40000],
+            "train_batch_size": [1000, 20000],
             "num_sgd_iter": [5, 30],
             "sgd_minibatch_size": [32, 512],
             "vf_clip_param": [10, 100],
             "grad_clip": [0.1, 20],
             "entropy_coeff": [0, 1e-2],
             "vf_loss_coeff": [0.1, 2],
+            "gamma": [0.9, 0.999],
         },
     )
 
@@ -144,11 +148,13 @@ if __name__ == "__main__":
         name="{}_{}_{}_seed{}_{}".format(
             timelog, args.method, args.env_name, str(args.seed), args.filename
         ),
+        local_dir="ray_results/" + env_name,
         scheduler=methods[args.method],
         verbose=1,
         num_samples=args.num_samples,
         reuse_actors=False,
         stop={args.criteria: args.max},
+        checkpoint_freq=20,
         config={
             "num_rollout_workers": args.num_workers,
             "env": args.env_name,
@@ -158,7 +164,7 @@ if __name__ == "__main__":
             "kl_coeff": 0.2,
             "num_gpus": 1 / args.num_samples,
             "horizon": args.horizon,
-            "observation_filter": "MeanStdFilter",
+            # "observation_filter": "MeanStdFilter",
             "model": {
                 "dim": 84,
                 # "fcnet_hiddens": [
@@ -172,17 +178,19 @@ if __name__ == "__main__":
             # "sgd_minibatch_size": 128,
             "num_sgd_iter": sample_from(lambda spec: random.randint(5, 30)),
             "sgd_minibatch_size": sample_from(lambda spec: random.randint(32, 512)),
-            "kl_target": 1e-4,
+            "kl_target": 1e-3,
             "vf_clip_param": sample_from(lambda spec: random.randint(10, 100)),
             "grad_clip": sample_from(lambda spec: random.choice(np.logspace(-1, 1.3, 50))),
             "lambda": sample_from(lambda spec: random.uniform(0.9, 1.0)),
             "clip_param": sample_from(lambda spec: random.uniform(0.1, 0.5)),
             "lr": sample_from(lambda spec: random.uniform(1e-3, 1e-5)),
             "entropy_coeff": sample_from(lambda spec: random.uniform(0, 1e-2)),
-            "train_batch_size": sample_from(lambda spec: random.randint(1000, 40000)),
+            "train_batch_size": sample_from(lambda spec: random.randint(1000, 20000)),
             "vf_loss_coeff": sample_from(lambda spec: random.uniform(0.1, 2)),
+            "gamma": sample_from(lambda spec: random.uniform(0.9, 0.999)),
         },
-        max_failures=-1
+        max_failures=-1,
+        # callbacks = [WandbLoggerCallback(project="confrez-ray", entity="confrez")]
     )
 
     print(analysis.get_best_config('episode_reward_mean', 'max'))
