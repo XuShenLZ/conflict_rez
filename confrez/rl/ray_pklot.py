@@ -32,17 +32,16 @@ from torch import nn
 
 n_agents = 1
 random_reset = True
-max_cycles = 500
+max_cycles = 400
 
 
 def get_env(render=False):
     """This function is needed to provide callables for DummyVectorEnv."""
     env_config = pklot_env_cont.EnvParams(
-        reward_stop=-10, reward_dist=10, reward_heading=-1, reward_time=-1, reward_collision=-10, reward_goal=1000,
-        window_size=84
+        reward_stop=-10, reward_dist=20, reward_heading=0, reward_time=-1, reward_collision=-10, reward_goal=1000,
     )
     env = pklot_env_cont.parallel_env(n_vehicles=n_agents, random_reset=random_reset, render_mode="rgb_array",
-                                      params=env_config, max_cycles=max_cycles, return_scaled=True)
+                                      params=env_config, max_cycles=max_cycles, return_scaled=True, resize=(70, 70))
 
     return env
 
@@ -57,7 +56,7 @@ if __name__ == "__main__":
     env = get_env()
     rollout_workers = 28
     rollout_length = 50
-    num_envs_per = 4
+    num_envs_per = 8
 
     batch_size = rollout_workers * rollout_length * num_envs_per
     mini_batch = 4
@@ -68,24 +67,22 @@ if __name__ == "__main__":
         .rollouts(num_rollout_workers=rollout_workers, rollout_fragment_length='auto',
                   num_envs_per_worker=num_envs_per)
         .training(
-            train_batch_size=40000,
+            train_batch_size=20000,
             lr=1e-5,
-            # lr_schedule=[[0, 1e-5], [1e6, 1e-4], [2e6, 1e-3], [3e6, 1e-2]],
-            kl_coeff=0.2,
             kl_target=1e-3,
             gamma=0.9,
             lambda_=0.9,
             use_gae=True,
             clip_param=0.1,
             grad_clip=0.1,
-            entropy_coeff=0.01,
+            entropy_coeff=0.001,
             vf_loss_coeff=2.0,  # 0.05
             vf_clip_param=100,  # 10 (2 vehicle)
             sgd_minibatch_size=512,
             num_sgd_iter=30,
-            model={"dim": 84, "use_lstm": False, "framestack": True, # "post_fcnet_hiddens": [128, 128],
-                   "vf_share_layers": False, "free_log_std": False,}
-                   # "conv_filters": [[16, [16, 16], 4], [32, [4, 4], 2], [64, [4, 4], 2], [512, [9, 9], 1]]},
+            model={"dim": 140, "use_lstm": False, "framestack": True,  # "post_fcnet_hiddens": [128, 128],
+                   "vf_share_layers": False, "free_log_std": False,
+                    "conv_filters": [[16, [16, 16], 4], [32, [4, 4], 2], [64, [4, 4], 2], [512, [5, 5], 1]]},
         )
         .debugging(log_level="INFO")
         .framework(framework="torch")
@@ -107,7 +104,7 @@ if __name__ == "__main__":
         checkpoint_freq=20,
         local_dir="ray_results/" + env_name,
         config=config.to_dict(),
+        # resume=True,
         # max_failures=-1,
         callbacks=[WandbLoggerCallback(project="confrez-ray", entity="confrez")],
-        resume=True
     )

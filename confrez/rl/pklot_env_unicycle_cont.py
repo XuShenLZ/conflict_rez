@@ -31,7 +31,8 @@ class EnvParams(PythonMsg):
 
     spot_width: float = field(default=2.5)
     region: GeofenceRegion = field(default=None)
-    window_size: int = field(default=84)
+    window_size: int = field(default=140)  # This is for how big the surface is defined for pygame.
+    # Should be left fairly large and use resize to resize observations to the desired dimensions. Otherwise causes weird distortions.
 
     dyaw_res: float = field(default=0.1)
     speed_res: float = field(default=0.1)
@@ -39,7 +40,7 @@ class EnvParams(PythonMsg):
     dt: float = field(default=0.1)
     eps: float = field(default=1)
 
-    goal_r: float = field(default=0.5)
+    goal_r: float = field(default=1)
     goal_y: float = field(default=np.pi / 6)
 
     reward_time: float = field(default=-1)
@@ -90,7 +91,7 @@ class parallel_env(ParallelEnv, EzPickle):
         seed=None,
         random_reset=False,
         render_mode="human",
-        resize=None,
+        resize=None, # Should be a 2d tuple of the desired dimension for the observations.
         params=EnvParams(),
         return_scaled=False,
     ):
@@ -278,7 +279,7 @@ class parallel_env(ParallelEnv, EzPickle):
 
                     self.update_vehicle_polygon(agent)
                     if self.has_collision(agent) \
-                        or np.linalg.norm([init_state[0] - self.goals[agent].x.x, init_state[1] - self.goals[agent].x.y]) < 4:
+                        or np.linalg.norm([init_state[0] - self.goals[agent].x.x, init_state[1] - self.goals[agent].x.y]) < 8:
                         # or np.linalg.norm([init_state[0] - self.goals[agent].x.x, init_state[1] - self.goals[agent].x.y]) > 6:
                         continue
                     else:
@@ -788,6 +789,7 @@ class parallel_env(ParallelEnv, EzPickle):
         check whether a sampled action is static
         """
         v, w = action[0], action[1]
+        # Might be something to look at
         return np.abs(v) < 1e-2 and np.abs(w) < 1e-2
 
     def step(self, actions: Dict[str, np.ndarray]):
