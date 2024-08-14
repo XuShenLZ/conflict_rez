@@ -8,12 +8,12 @@ import pygame
 from pygame.locals import *
 
 env_config = pklot_env_cont.EnvParams(
-    reward_stop=-10, reward_dist=10, reward_heading=-1, reward_time=-1, reward_collision=-10, reward_goal=100,
+    reward_stop=-10, reward_dist=10, reward_heading=-1, reward_time=-1, reward_collision=-10, reward_goal=1000,
     window_size=500
 )
-env = raw_env(n_vehicles=1, render_mode='human', random_reset=True, params=env_config, max_cycles=2000)
+env = raw_env(n_vehicles=1, render_mode='human', random_reset=True, params=env_config, max_cycles=4000)
 
-observations = env.reset()
+observations = env.reset(seed=4)
 
 frame_list = []
 done, trunc = False, False
@@ -22,11 +22,10 @@ step = 0
 # for _ in range(10):
 #     env.reset()
 total_rew = 0
-while False in env.terminations.values():
+while False in env.terminations.values() and False in env.truncations.values():
     agent = env.agent_selection
     step += 1
     pygame.event.get()
-    # actions = env.action_space(agent).sample()
     env.render()
     if done or trunc:
         env.step(None)
@@ -45,15 +44,8 @@ while False in env.terminations.values():
         if keys[K_a]:
             actions = [0, 0.2]
             break
-    #
-    # elif agent == 'vehicle_1':
-    #     durations = [30, 13, 40]
-    #     total_duration = [sum(durations[:i + 1]) for i in range(len(durations))]
-    #     possible_actions = [[2.5, 0], [0, 1.22], [2.5, 0]]
-    #     for i, time in enumerate(total_duration):
-    #         if step // 2 < time:
-    #             actions = possible_actions[i]
-    #             break
+    # if not (False in env.terminations.values() or False in env.truncations.values()):
+    #     break
 
     env.step(actions)
     env.render()

@@ -859,8 +859,10 @@ class parallel_env(ParallelEnv, EzPickle):
             for agent in self.agents:
                 # The further the vehicle is away from the goal, the larger the penalty
                 if self.prev_dist[agent] is not None:
-                    rewards[agent] += self.params.reward_dist * (self.prev_dist[agent] - self.dist2goal(agent))
-                self.prev_dist[agent] = self.dist2goal(agent)
+                    rewards[agent] += self.params.reward_dist * max(self.prev_dist[agent] - self.dist2goal(agent), 0)
+                    self.prev_dist[agent] = min(self.dist2goal(agent), self.prev_dist[agent])
+                else:
+                    self.prev_dist[agent] = self.dist2goal(agent)
 
                 # Start taking into account the heading of the car once its close enough to the goal
                 if self.dist2goal(agent) < 4:
