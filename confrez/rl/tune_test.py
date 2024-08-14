@@ -16,8 +16,8 @@ from ray.air.integrations.wandb import WandbLoggerCallback
 import ray
 
 
-n_agents = 1
-random_reset = False
+n_agents = 4
+random_reset = True
 
 
 # Postprocess the perturbed config to ensure it's still valid used if PBT.
@@ -36,14 +36,14 @@ if __name__ == "__main__":
     RAY_memory_monitor_refresh_ms = 0
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--max", type=int, default=5000000)
+    parser.add_argument("--max", type=int, default=int(1e8))
     parser.add_argument("--algo", type=str, default="PPO")
     parser.add_argument("--num_workers", type=int, default=9)
     parser.add_argument("--num_samples", type=int, default=3)
-    parser.add_argument("--t_ready", type=int, default=30000)
+    parser.add_argument("--t_ready", type=int, default=80000)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
-        "--horizon", type=int, default=500
+        "--horizon", type=int, default=600
     )  # make this 1000 for other envs
     parser.add_argument("--perturb", type=float, default=0.25)  # if using PBT
     parser.add_argument("--env_name", type=str, default="pk_lot")
@@ -51,7 +51,7 @@ if __name__ == "__main__":
         "--criteria", type=str, default="timesteps_total"
     )  # "training_iteration", "time_total_s"
     parser.add_argument(
-        "--net", type=str, default="128_128"
+        "--net", type=str, default="256_256"
     )  # May be important to use a larger network for bigger tasks.
     parser.add_argument("--filename", type=str, default="")
     parser.add_argument("--method", type=str, default="pb2")  # ['pbt', 'pb2']
@@ -63,11 +63,10 @@ if __name__ == "__main__":
     def get_env(render=False):
         """This function is needed to provide callables for DummyVectorEnv."""
         env_config = pklot_env_cont.EnvParams(
-            reward_stop=-10, reward_dist=10, reward_heading=0, reward_time=-1, reward_collision=-10, reward_goal=1000,
-            window_size=84
+            reward_stop=-10, reward_dist=20, reward_heading=0, reward_time=-1, reward_collision=-10, reward_goal=1000,
         )
         env = pklot_env_cont.parallel_env(n_vehicles=n_agents, random_reset=random_reset, render_mode="rgb_array",
-                                          params=env_config, max_cycles=args.horizon, seed=args.seed, return_scaled=True)
+                                          params=env_config, max_cycles=args.horizon, return_scaled=False, resize=(84, 84))
 
         return env
 
@@ -91,16 +90,17 @@ if __name__ == "__main__":
         # Specifies the search space for these hyperparams
         hyperparam_mutations={
             "lambda": lambda: random.uniform(0.9, 1.0),
-            "clip_param": lambda: random.uniform(0.1, 0.5),
+            "clip_param": lambda: random.uniform(0.1, 0.3),
             "lr": lambda: random.uniform(1e-3, 1e-5),
-            "train_batch_size": lambda: random.randint(1000, 20000),
+            "train_batch_size": lambda: random.randint(500, 10000),
             "num_sgd_iter": lambda: random.randint(5, 30),
-            "sgd_minibatch_size": lambda: random.randint(32, 512),
+            "sgd_minibatch_size": lambda: random.randint(32, 1024),
             "vf_clip_param": lambda: random.randint(10, 100),
-            "grad_clip": lambda: random.choice(np.logspace(-1, 1.3, 50)),
+            "grad_clip": lambda: random.choice(np.logspace(-1, 0, 50)),
             "entropy_coeff": lambda: random.uniform(0, 1e-2),
-            "vf_loss_coeff": lambda: random.uniform(0.1, 2),
+            "vf_loss_coeff": lambda: random.uniform(0.1, 4),
             "gamma": lambda: random.uniform(0.9, 0.999),
+            # "kl_target": lambda: random.uniform(3e-3, 1e-2),
         },
         custom_explore_fn=explore,
     )
@@ -114,13 +114,14 @@ if __name__ == "__main__":
         # Specifies the hyperparam search space
         hyperparam_bounds={
             "lambda": [0.9, 1.0],
-            "clip_param": [0.1, 0.5],
+            "clip_param": [0.1, 0.3],
             "lr": [1e-5, 1e-3],
-            "train_batch_size": [1000, 20000],
+            "train_batch_size": [500, 10000],
             "num_sgd_iter": [5, 30],
             "sgd_minibatch_size": [32, 512],
+            # "kl_target": [3e-3, 1e-2],
             "vf_clip_param": [10, 100],
-            "grad_clip": [0.1, 20],
+            "grad_clip": [0.1, 1],
             "entropy_coeff": [0, 1e-2],
             "vf_loss_coeff": [0.1, 2],
             "gamma": [0.9, 0.999],
@@ -150,21 +151,23 @@ if __name__ == "__main__":
         ),
         local_dir="ray_results/" + env_name,
         scheduler=methods[args.method],
-        verbose=1,
+        verbose=3,
         num_samples=args.num_samples,
         reuse_actors=False,
         stop={args.criteria: args.max},
-        checkpoint_freq=20,
+        checkpoint_freq=10,
+        keep_checkpoints_num=3,
         config={
             "num_rollout_workers": args.num_workers,
+            "num_envs_per_worker": 3,
             "env": args.env_name,
             "disable_env_checking": True,
             "log_level": "INFO",
             "seed": args.seed,
-            "kl_coeff": 0.2,
+            "kl_coeff": 64,
             "num_gpus": 1 / args.num_samples,
             "horizon": args.horizon,
-            # "observation_filter": "MeanStdFilter",
+            "observation_filter": "MeanStdFilter",
             "model": {
                 "dim": 84,
                 # "fcnet_hiddens": [
@@ -174,23 +177,24 @@ if __name__ == "__main__":
                 "free_log_std": False,
                 "framestack": True,
                 # "conv_filters": [[16, [16, 16], 4], [32, [4, 4], 2], [64, [4, 4], 2], [512, [9, 9], 1]],
+                "use_lstm": False,
             },
-            # "sgd_minibatch_size": 128,
             "num_sgd_iter": sample_from(lambda spec: random.randint(5, 30)),
-            "sgd_minibatch_size": sample_from(lambda spec: random.randint(32, 512)),
-            "kl_target": 1e-3,
+            "sgd_minibatch_size": sample_from(lambda spec: random.randint(64, 512)),
+            "kl_target": 0.003,
+            # "kl_target": sample_from(lambda spec: random.uniform(3e-3, 1e-2)),
             "vf_clip_param": sample_from(lambda spec: random.randint(10, 100)),
-            "grad_clip": sample_from(lambda spec: random.choice(np.logspace(-1, 1.3, 50))),
+            "grad_clip": sample_from(lambda spec: random.choice(np.logspace(-1, 0, 50))),
             "lambda": sample_from(lambda spec: random.uniform(0.9, 1.0)),
-            "clip_param": sample_from(lambda spec: random.uniform(0.1, 0.5)),
+            "clip_param": sample_from(lambda spec: random.uniform(0.1, 0.3)),
             "lr": sample_from(lambda spec: random.uniform(1e-3, 1e-5)),
             "entropy_coeff": sample_from(lambda spec: random.uniform(0, 1e-2)),
-            "train_batch_size": sample_from(lambda spec: random.randint(1000, 20000)),
+            "train_batch_size": sample_from(lambda spec: random.randint(500, 10000)),
             "vf_loss_coeff": sample_from(lambda spec: random.uniform(0.1, 2)),
             "gamma": sample_from(lambda spec: random.uniform(0.9, 0.999)),
         },
         max_failures=-1,
-        # callbacks = [WandbLoggerCallback(project="confrez-ray", entity="confrez")]
+        # callbacks=[WandbLoggerCallback(project="confrez-ray", entity="confrez")],
     )
 
     print(analysis.get_best_config('episode_reward_mean', 'max'))

@@ -17,7 +17,7 @@ from ray.rllib.algorithms.ppo import PPO, PPOConfig
 
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 
-checkpoint_path = os.path.expanduser("ray_results/pk_lot/PPO-1-randTrue-m_cycles400/PPO_pk_lot_4c884_00000_0_2024-07-09_02-40-38/checkpoint_003560")
+checkpoint_path = os.path.expanduser("ray_results/pk_lot/PPO-4-randTrue-m_cycles500/PPO_pk_lot_0dc61_00000_0_2024-07-27_02-46-10/checkpoint_004800")
 
 
 def get_env(render=False):
@@ -25,8 +25,8 @@ def get_env(render=False):
     env_config = pklot_env_cont.EnvParams(
         reward_stop=-10, reward_dist=20, reward_heading=0, reward_time=-1, reward_collision=-10, reward_goal=1000,
     )
-    env = pklot_env_cont.parallel_env(n_vehicles=1, random_reset=True, render_mode="rgb_array",
-                                      params=env_config, max_cycles=500, return_scaled=True, resize=(70, 70))
+    env = pklot_env_cont.parallel_env(n_vehicles=4, random_reset=True, render_mode="rgb_array",
+                                      params=env_config, max_cycles=800, return_scaled=True, resize=(70, 70))
     return env
 
 
@@ -42,9 +42,9 @@ frame_list = []
 obs_list = []
 i = 0
 actions = {}
-obs, _ = env.reset()
-print(obs['vehicle_0'].shape)
-print(env.render().shape)
+obs, _ = env.reset(fast_reset=True)
+# print(obs['vehicle_0'].shape)
+# print(env.render().shape)
 
 while True:
     actions = {}

@@ -21,6 +21,7 @@ from confrez.pytypes import PythonMsg, VehicleState
 from confrez.vehicle_types import VehicleConfig, VehicleBody
 from confrez.dynamic_model import unicycle_simulator
 import cv2
+import itertools
 
 
 @dataclass
@@ -118,6 +119,7 @@ class parallel_env(ParallelEnv, EzPickle):
         )
         self.random_reset = random_reset
         self.prev_dist = {agent: None for agent in self.possible_agents}
+        self.valid_layouts = []
 
         self.vb = VehicleBody()
         self.vehicle_config = VehicleConfig()
@@ -205,6 +207,9 @@ class parallel_env(ParallelEnv, EzPickle):
 
         self.init_walls()
         self.collisions = {agent_id: False for agent_id in self.possible_agents}
+        self.possible_locations = list(itertools.product(
+            self.possible_x * self.spot_width, self.possible_y * self.spot_width, np.asarray(self.possible_angles
+                                                                                             )))
         # self._agent_ids = set(self.possible_agents[:])
 
     def g2i(self, x: float, y: float) -> Tuple[float, float]:
@@ -221,7 +226,7 @@ class parallel_env(ParallelEnv, EzPickle):
 
     def init_vehicles(self):
         if self.random_reset:
-            n_vehicles = self.n_vehicles
+            n_vehicles = np.random.randint(1, self.n_vehicles + 1) #self.n_vehicles
             self.agents = sorted(random.sample(self.possible_agents, n_vehicles))
             #
             configs = random.sample(self.agent_configs, n_vehicles)
@@ -269,18 +274,19 @@ class parallel_env(ParallelEnv, EzPickle):
                                       np.random.choice(self.possible_angles)]
                     else:
                         init_state = random.choice(parking_spots)
+
                     orientation = np.random.choice([0, np.pi])
                     y_d = 1 * self.spot_width if orientation == np.pi and goal[2] == np.pi / 2 else 0
                     x_d = 1 * self.spot_width if orientation == np.pi and goal[2] == 0 else 0
 
-                    self.states[agent].x.x = init_state[0] + x_d #- self.vb.wb / 2 * np.cos(init_state[2])
-                    self.states[agent].x.y = init_state[1] + y_d #sssss- self.vb.wb / 2 * np.sin(init_state[2])
+                    self.states[agent].x.x = init_state[0] + x_d
+                    self.states[agent].x.y = init_state[1] + y_d
                     self.states[agent].e.psi = init_state[2] + orientation
 
                     self.update_vehicle_polygon(agent)
-                    if self.has_collision(agent) \
-                        or np.linalg.norm([init_state[0] - self.goals[agent].x.x, init_state[1] - self.goals[agent].x.y]) < 8:
-                        # or np.linalg.norm([init_state[0] - self.goals[agent].x.x, init_state[1] - self.goals[agent].x.y]) > 6:
+                    if (self.has_collision(agent) or
+                        np.linalg.norm([init_state[0] - self.goals[agent].x.x,
+                                        init_state[1] - self.goals[agent].x.y]) < 8):
                         continue
                     else:
                         break
@@ -758,7 +764,7 @@ class parallel_env(ParallelEnv, EzPickle):
                 pygame.display.quit()
 
     def reset(
-        self, seed=None, return_info=True, options=None
+        self, seed=None, return_info=True, options=None, fast_reset=False,
     ):
         if seed is not None:
             self.seed(seed)
@@ -766,12 +772,24 @@ class parallel_env(ParallelEnv, EzPickle):
         self.frame = 0
         self.cycle_done = False
 
-        self.init_walls()
-        self.init_vehicles()
+        while len(self.valid_layouts) < 1000:
+            self.init_walls()
+            self.init_vehicles()
+            layout = (self.walls, self.goals, self.states, self.agents)
+
+            self.valid_layouts.append(layout)
+            if fast_reset:
+                break
+
+        layout = random.choice(self.valid_layouts)
+        self.walls = layout[0]
+        self.goals = layout[1]
+        self.states = layout[2]
+        self.agents = layout[3]
 
         self.draw_walls()
-        self.agents = self.possible_agents[:]
-        self.prev_dist = {agent: None for agent in self.possible_agents}
+        # self.agents = self.possible_agents[:]
+        self.prev_dist = {agent: None for agent in self.agents}
 
         observations = {agent: self.observe(agent) for agent in self.agents}
 

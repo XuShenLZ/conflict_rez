@@ -30,9 +30,9 @@ import random
 from typing import Dict, Tuple, List
 from torch import nn
 
-n_agents = 1
+n_agents = 4
 random_reset = True
-max_cycles = 400
+max_cycles = 600
 
 
 def get_env(render=False):
@@ -41,7 +41,7 @@ def get_env(render=False):
         reward_stop=-10, reward_dist=20, reward_heading=0, reward_time=-1, reward_collision=-10, reward_goal=1000,
     )
     env = pklot_env_cont.parallel_env(n_vehicles=n_agents, random_reset=random_reset, render_mode="rgb_array",
-                                      params=env_config, max_cycles=max_cycles, return_scaled=True, resize=(70, 70))
+                                      params=env_config, max_cycles=max_cycles, return_scaled=True, resize=(84, 84))
 
     return env
 
@@ -54,11 +54,11 @@ if __name__ == "__main__":
     register_env("pk_lot", lambda config: ParallelPettingZooEnv(get_env()))
     env_name = "pk_lot"
     env = get_env()
-    rollout_workers = 28
-    rollout_length = 50
-    num_envs_per = 8
+    rollout_workers = 30
+    rollout_length = 66
+    num_envs_per = 1
 
-    batch_size = rollout_workers * rollout_length * num_envs_per
+    batch_size = rollout_workers * rollout_length * num_envs_per * 4
     mini_batch = 4
 
     config = (
@@ -67,22 +67,23 @@ if __name__ == "__main__":
         .rollouts(num_rollout_workers=rollout_workers, rollout_fragment_length='auto',
                   num_envs_per_worker=num_envs_per)
         .training(
-            train_batch_size=20000,
-            lr=1e-5,
-            kl_target=1e-3,
+            kl_coeff=32,
+            train_batch_size=1000,
+            lr=1e-3,
+            kl_target=0.01,
             gamma=0.9,
-            lambda_=0.9,
+            lambda_=1.0,
             use_gae=True,
-            clip_param=0.1,
+            clip_param=0.5,
             grad_clip=0.1,
-            entropy_coeff=0.001,
-            vf_loss_coeff=2.0,  # 0.05
-            vf_clip_param=100,  # 10 (2 vehicle)
-            sgd_minibatch_size=512,
-            num_sgd_iter=30,
-            model={"dim": 140, "use_lstm": False, "framestack": True,  # "post_fcnet_hiddens": [128, 128],
-                   "vf_share_layers": False, "free_log_std": False,
-                    "conv_filters": [[16, [16, 16], 4], [32, [4, 4], 2], [64, [4, 4], 2], [512, [5, 5], 1]]},
+            entropy_coeff=0.01,
+            vf_loss_coeff=2.0,
+            vf_clip_param=200,
+            sgd_minibatch_size=32,
+            num_sgd_iter=5,
+            model={"dim": 84, "use_lstm": False, "framestack": True,  # "post_fcnet_hiddens": [128, 128],
+                   "vf_share_layers": False, "free_log_std": False}
+                    # "conv_filters": [[16, [16, 16], 4], [32, [4, 4], 2], [64, [4, 4], 2], [512, [5, 5], 1]]},
         )
         .debugging(log_level="INFO")
         .framework(framework="torch")
