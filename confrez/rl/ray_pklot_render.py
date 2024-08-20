@@ -17,16 +17,16 @@ from ray.rllib.algorithms.ppo import PPO, PPOConfig
 
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 
-checkpoint_path = os.path.expanduser("ray_results/pk_lot/PPO-4-randTrue-m_cycles500/PPO_pk_lot_0dc61_00000_0_2024-07-27_02-46-10/checkpoint_004800")
+checkpoint_path = os.path.expanduser("ray_results/pk_lot/PPO-2-randTrue-m_cycles500/PPO_pk_lot_a6248_00000_0_2024-08-18_13-15-44/checkpoint_009180")
 
 
 def get_env(render=False):
     """This function is needed to provide callables for DummyVectorEnv."""
     env_config = pklot_env_cont.EnvParams(
-        reward_stop=-10, reward_dist=20, reward_heading=0, reward_time=-1, reward_collision=-10, reward_goal=1000,
+        reward_stop=-10, reward_dist=10, reward_heading=0, reward_time=-1, reward_collision=-10, reward_goal=1000,
     )
-    env = pklot_env_cont.parallel_env(n_vehicles=4, random_reset=True, render_mode="rgb_array",
-                                      params=env_config, max_cycles=800, return_scaled=True, resize=(70, 70))
+    env = pklot_env_cont.parallel_env(n_vehicles=2, random_reset=True, render_mode="rgb_array", seed=0,
+                                      params=env_config, max_cycles=500, return_scaled=True, resize=(84, 84))
     return env
 
 
@@ -42,7 +42,7 @@ frame_list = []
 obs_list = []
 i = 0
 actions = {}
-obs, _ = env.reset(fast_reset=True)
+obs, _ = env.reset()
 # print(obs['vehicle_0'].shape)
 # print(env.render().shape)
 
@@ -52,7 +52,7 @@ while True:
         # agent = list(obs.keys())[num]
         current_obs = obs[agent].copy()
         action = (PPO_agent.compute_single_action
-                           (current_obs, policy_id='shared_policy'))
+                           (current_obs, policy_id=agent))
         action = np.clip(action, env.action_space(agent).low, env.action_space(agent).high)
         actions[agent] = action
     obs, reward, termination, truncation, _ = env.step(actions)
@@ -60,6 +60,7 @@ while True:
         break
 
     reward_sum += sum(reward.values())
+    num_collisions = sum([r < -5 for r in reward.values()])
 
     i += 1
     if i % (len(env.possible_agents) + 1) == 0:
@@ -70,6 +71,7 @@ while True:
 env.close()
 
 print(reward_sum)
+print(num_collisions)
 frame_list[0].save(
     f"{reward_sum}.gif", save_all=True, append_images=frame_list[1:], duration=3, loop=0
 )

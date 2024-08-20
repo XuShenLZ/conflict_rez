@@ -226,7 +226,7 @@ class parallel_env(ParallelEnv, EzPickle):
 
     def init_vehicles(self):
         if self.random_reset:
-            n_vehicles = np.random.randint(1, self.n_vehicles + 1) #self.n_vehicles
+            n_vehicles = self.n_vehicles# np.random.randint(1, self.n_vehicles + 1)  # self.n_vehicles
             self.agents = sorted(random.sample(self.possible_agents, n_vehicles))
             #
             configs = random.sample(self.agent_configs, n_vehicles)
@@ -772,7 +772,7 @@ class parallel_env(ParallelEnv, EzPickle):
         self.frame = 0
         self.cycle_done = False
 
-        while len(self.valid_layouts) < 1000:
+        while len(self.valid_layouts) < 100:
             self.init_walls()
             self.init_vehicles()
             layout = (self.walls, self.goals, self.states, self.agents)
@@ -859,8 +859,8 @@ class parallel_env(ParallelEnv, EzPickle):
             for agent in self.agents:
                 # The further the vehicle is away from the goal, the larger the penalty
                 if self.prev_dist[agent] is not None:
-                    rewards[agent] += self.params.reward_dist * max(self.prev_dist[agent] - self.dist2goal(agent), 0)
-                    self.prev_dist[agent] = min(self.dist2goal(agent), self.prev_dist[agent])
+                    rewards[agent] += self.params.reward_dist * (self.prev_dist[agent] - self.dist2goal(agent)) #max(self.prev_dist[agent] - self.dist2goal(agent), 0)
+                    self.prev_dist[agent] = self.dist2goal(agent) #min(self.dist2goal(agent), self.prev_dist[agent])
                 else:
                     self.prev_dist[agent] = self.dist2goal(agent)
 

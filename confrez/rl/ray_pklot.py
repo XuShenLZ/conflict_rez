@@ -30,17 +30,17 @@ import random
 from typing import Dict, Tuple, List
 from torch import nn
 
-n_agents = 4
+n_agents = 2
 random_reset = True
-max_cycles = 600
+max_cycles = 500
 
 
 def get_env(render=False):
     """This function is needed to provide callables for DummyVectorEnv."""
     env_config = pklot_env_cont.EnvParams(
-        reward_stop=-10, reward_dist=20, reward_heading=0, reward_time=-1, reward_collision=-10, reward_goal=1000,
+        reward_stop=-10, reward_dist=10, reward_heading=0, reward_time=-1, reward_collision=-10, reward_goal=1000,
     )
-    env = pklot_env_cont.parallel_env(n_vehicles=n_agents, random_reset=random_reset, render_mode="rgb_array",
+    env = pklot_env_cont.parallel_env(n_vehicles=n_agents, random_reset=random_reset, render_mode="rgb_array", seed=0,
                                       params=env_config, max_cycles=max_cycles, return_scaled=True, resize=(84, 84))
 
     return env
@@ -55,32 +55,32 @@ if __name__ == "__main__":
     env_name = "pk_lot"
     env = get_env()
     rollout_workers = 30
-    rollout_length = 66
+    rollout_length = 100
     num_envs_per = 1
 
-    batch_size = rollout_workers * rollout_length * num_envs_per * 4
+    batch_size = rollout_workers * rollout_length * num_envs_per * 2
     mini_batch = 4
 
     config = (
         PPOConfig()  # Version 2.5.0
         .environment(env="pk_lot", disable_env_checking=True, render_env=False)  # , env_task_fn=curriculum_fn
-        .rollouts(num_rollout_workers=rollout_workers, rollout_fragment_length='auto',
+        .rollouts(num_rollout_workers=rollout_workers, rollout_fragment_length=rollout_length,
                   num_envs_per_worker=num_envs_per)
         .training(
-            kl_coeff=32,
-            train_batch_size=1000,
-            lr=1e-3,
-            kl_target=0.01,
+            kl_coeff=1,
+            train_batch_size=batch_size,
+            lr=1e-5,
+            kl_target=0.001,
             gamma=0.9,
-            lambda_=1.0,
+            lambda_=0.9,
             use_gae=True,
-            clip_param=0.5,
+            clip_param=0.1,
             grad_clip=0.1,
-            entropy_coeff=0.01,
-            vf_loss_coeff=2.0,
-            vf_clip_param=200,
-            sgd_minibatch_size=32,
-            num_sgd_iter=5,
+            entropy_coeff=0.001,
+            vf_loss_coeff=2,
+            vf_clip_param=80,
+            sgd_minibatch_size=512,
+            num_sgd_iter=10,
             model={"dim": 84, "use_lstm": False, "framestack": True,  # "post_fcnet_hiddens": [128, 128],
                    "vf_share_layers": False, "free_log_std": False}
                     # "conv_filters": [[16, [16, 16], 4], [32, [4, 4], 2], [64, [4, 4], 2], [512, [5, 5], 1]]},
@@ -89,9 +89,8 @@ if __name__ == "__main__":
         .framework(framework="torch")
         .resources(num_gpus=1)
         .multi_agent(
-            policies={"shared_policy"},  # env.possible_agents,
-            policy_mapping_fn=(lambda agent_id, episode, worker, **kwargs: "shared_policy")
-            # lambda agent_id, episode, worker, **kwargs: agent_id)
+            policies=env.possible_agents,
+            policy_mapping_fn=lambda agent_id, episode, worker, **kwargs: agent_id
         )
     )
 

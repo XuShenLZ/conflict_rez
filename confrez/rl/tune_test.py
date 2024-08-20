@@ -16,15 +16,15 @@ from ray.air.integrations.wandb import WandbLoggerCallback
 import ray
 
 
-n_agents = 4
+n_agents = 2
 random_reset = True
 
 
 # Postprocess the perturbed config to ensure it's still valid used if PBT.
 def explore(config):
     # Ensure we collect enough timesteps to do sgd.
-    if config["train_batch_size"] < config["sgd_minibatch_size"] * 2:
-        config["train_batch_size"] = config["sgd_minibatch_size"] * 2
+    if config["train_batch_size"] < config["sgd_minibatch_size"]:
+        config["train_batch_size"] = config["sgd_minibatch_size"]
     # Ensure we run at least one sgd iter.
     if config["lambda"] > 1:
         config["lambda"] = 1
@@ -40,10 +40,10 @@ if __name__ == "__main__":
     parser.add_argument("--algo", type=str, default="PPO")
     parser.add_argument("--num_workers", type=int, default=9)
     parser.add_argument("--num_samples", type=int, default=3)
-    parser.add_argument("--t_ready", type=int, default=80000)
+    parser.add_argument("--t_ready", type=int, default=30000)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
-        "--horizon", type=int, default=600
+        "--horizon", type=int, default=500
     )  # make this 1000 for other envs
     parser.add_argument("--perturb", type=float, default=0.25)  # if using PBT
     parser.add_argument("--env_name", type=str, default="pk_lot")
@@ -54,7 +54,7 @@ if __name__ == "__main__":
         "--net", type=str, default="256_256"
     )  # May be important to use a larger network for bigger tasks.
     parser.add_argument("--filename", type=str, default="")
-    parser.add_argument("--method", type=str, default="pb2")  # ['pbt', 'pb2']
+    parser.add_argument("--method", type=str, default="pbt")  # ['pbt', 'pb2']
     parser.add_argument("--save_csv", type=bool, default=True)
 
     args = parser.parse_args()
@@ -63,9 +63,9 @@ if __name__ == "__main__":
     def get_env(render=False):
         """This function is needed to provide callables for DummyVectorEnv."""
         env_config = pklot_env_cont.EnvParams(
-            reward_stop=-10, reward_dist=20, reward_heading=0, reward_time=-1, reward_collision=-10, reward_goal=1000,
+            reward_stop=-10, reward_dist=10, reward_heading=0, reward_time=-1, reward_collision=-10, reward_goal=1000,
         )
-        env = pklot_env_cont.parallel_env(n_vehicles=n_agents, random_reset=random_reset, render_mode="rgb_array",
+        env = pklot_env_cont.parallel_env(n_vehicles=n_agents, random_reset=random_reset, render_mode="rgb_array", seed=args.seed,
                                           params=env_config, max_cycles=args.horizon, return_scaled=False, resize=(84, 84))
 
         return env
@@ -73,6 +73,7 @@ if __name__ == "__main__":
 
     register_env("pk_lot", lambda config: ParallelPettingZooEnv(get_env()))
     env_name = "pk_lot"
+    env = get_env()
 
     # # bipedalwalker needs 1600
     # if args.env_name in ["BipedalWalker-v2", "BipedalWalker-v3"]:
@@ -82,8 +83,8 @@ if __name__ == "__main__":
 
     pbt = PopulationBasedTraining(
         time_attr=args.criteria,
-        metric="episode_reward_mean",
-        mode="max",
+        metric="episode_len_mean",
+        mode="min",
         perturbation_interval=args.t_ready,
         resample_probability=args.perturb,
         quantile_fraction=args.perturb,  # copy bottom % with top %
@@ -92,14 +93,14 @@ if __name__ == "__main__":
             "lambda": lambda: random.uniform(0.9, 1.0),
             "clip_param": lambda: random.uniform(0.1, 0.3),
             "lr": lambda: random.uniform(1e-3, 1e-5),
-            "train_batch_size": lambda: random.randint(500, 10000),
+            "train_batch_size": lambda: random.randint(1000, 10000),
             "num_sgd_iter": lambda: random.randint(5, 30),
-            "sgd_minibatch_size": lambda: random.randint(32, 1024),
+            "sgd_minibatch_size": lambda: random.randint(32, 512),
             "vf_clip_param": lambda: random.randint(10, 100),
             "grad_clip": lambda: random.choice(np.logspace(-1, 0, 50)),
             "entropy_coeff": lambda: random.uniform(0, 1e-2),
-            "vf_loss_coeff": lambda: random.uniform(0.1, 4),
-            "gamma": lambda: random.uniform(0.9, 0.999),
+            "vf_loss_coeff": lambda: random.uniform(0.1, 2),
+            "gamma": lambda: random.uniform(0.9, 0.997),
             # "kl_target": lambda: random.uniform(3e-3, 1e-2),
         },
         custom_explore_fn=explore,
@@ -116,15 +117,15 @@ if __name__ == "__main__":
             "lambda": [0.9, 1.0],
             "clip_param": [0.1, 0.3],
             "lr": [1e-5, 1e-3],
-            "train_batch_size": [500, 10000],
+            "train_batch_size": [1000, 10000],
             "num_sgd_iter": [5, 30],
-            "sgd_minibatch_size": [32, 512],
+            "sgd_minibatch_size": [64, 512],
             # "kl_target": [3e-3, 1e-2],
             "vf_clip_param": [10, 100],
             "grad_clip": [0.1, 1],
             "entropy_coeff": [0, 1e-2],
             "vf_loss_coeff": [0.1, 2],
-            "gamma": [0.9, 0.999],
+            "gamma": [0.9, 0.997],
         },
     )
 
@@ -164,7 +165,7 @@ if __name__ == "__main__":
             "disable_env_checking": True,
             "log_level": "INFO",
             "seed": args.seed,
-            "kl_coeff": 64,
+            "kl_coeff": 1,
             "num_gpus": 1 / args.num_samples,
             "horizon": args.horizon,
             "observation_filter": "MeanStdFilter",
@@ -175,23 +176,26 @@ if __name__ == "__main__":
                 #     int(args.net.split("_")[1]),
                 # ],
                 "free_log_std": False,
-                "framestack": True,
+                "framestack": False,
                 # "conv_filters": [[16, [16, 16], 4], [32, [4, 4], 2], [64, [4, 4], 2], [512, [9, 9], 1]],
-                "use_lstm": False,
+                "use_lstm": True,
             },
             "num_sgd_iter": sample_from(lambda spec: random.randint(5, 30)),
             "sgd_minibatch_size": sample_from(lambda spec: random.randint(64, 512)),
             "kl_target": 0.003,
             # "kl_target": sample_from(lambda spec: random.uniform(3e-3, 1e-2)),
             "vf_clip_param": sample_from(lambda spec: random.randint(10, 100)),
-            "grad_clip": sample_from(lambda spec: random.choice(np.logspace(-1, 0, 50))),
+            "grad_clip": sample_from(lambda spec: random.uniform(0.1, 0.5)),
             "lambda": sample_from(lambda spec: random.uniform(0.9, 1.0)),
             "clip_param": sample_from(lambda spec: random.uniform(0.1, 0.3)),
-            "lr": sample_from(lambda spec: random.uniform(1e-3, 1e-5)),
             "entropy_coeff": sample_from(lambda spec: random.uniform(0, 1e-2)),
-            "train_batch_size": sample_from(lambda spec: random.randint(500, 10000)),
+            "train_batch_size": sample_from(lambda spec: random.randint(1000, 10000)),
             "vf_loss_coeff": sample_from(lambda spec: random.uniform(0.1, 2)),
-            "gamma": sample_from(lambda spec: random.uniform(0.9, 0.999)),
+            "gamma": sample_from(lambda spec: random.uniform(0.9, 0.997)),
+            "multi_agent": {
+                "policies": {"shared_policy"}, #env.possible_agents,
+                "policy_mapping_fn": lambda agent_id, episode, worker, **kwargs: "shared_policy"
+            },
         },
         max_failures=-1,
         # callbacks=[WandbLoggerCallback(project="confrez-ray", entity="confrez")],
