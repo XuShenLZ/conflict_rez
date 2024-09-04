@@ -38,10 +38,10 @@ max_cycles = 500
 def get_env(render=False):
     """This function is needed to provide callables for DummyVectorEnv."""
     env_config = pklot_env_cont.EnvParams(
-        reward_stop=-10, reward_dist=10, reward_heading=0, reward_time=-1, reward_collision=-10, reward_goal=1000,
+        reward_stop=-1, reward_dist=10, reward_heading=0, reward_time=-1, reward_collision=-1, reward_goal=1000,
     )
     env = pklot_env_cont.parallel_env(n_vehicles=n_agents, random_reset=random_reset, render_mode="rgb_array", seed=0,
-                                      params=env_config, max_cycles=max_cycles, return_scaled=True, resize=(84, 84))
+                                      params=env_config, max_cycles=max_cycles, return_scaled=True)
 
     return env
 
@@ -58,7 +58,7 @@ if __name__ == "__main__":
     rollout_length = 100
     num_envs_per = 1
 
-    batch_size = rollout_workers * rollout_length * num_envs_per * 2
+    batch_size = rollout_workers * rollout_length * num_envs_per * 4
     mini_batch = 4
 
     config = (
@@ -70,27 +70,29 @@ if __name__ == "__main__":
             kl_coeff=1,
             train_batch_size=batch_size,
             lr=1e-5,
-            kl_target=0.001,
-            gamma=0.9,
+            kl_target=0.01,
+            gamma=0.99,
             lambda_=0.9,
             use_gae=True,
-            clip_param=0.1,
-            grad_clip=0.1,
-            entropy_coeff=0.001,
+            clip_param=0.2,
+            grad_clip=0.5,
+            entropy_coeff=0.0,
             vf_loss_coeff=2,
             vf_clip_param=80,
             sgd_minibatch_size=512,
-            num_sgd_iter=10,
-            model={"dim": 84, "use_lstm": False, "framestack": True,  # "post_fcnet_hiddens": [128, 128],
-                   "vf_share_layers": False, "free_log_std": False}
-                    # "conv_filters": [[16, [16, 16], 4], [32, [4, 4], 2], [64, [4, 4], 2], [512, [5, 5], 1]]},
+            num_sgd_iter=25,
+            model={"dim": 140, "use_lstm": False, "framestack": True, "post_fcnet_hiddens": [128, 128],
+                   "vf_share_layers": False, "free_log_std": True,
+                    "conv_filters": [[16, [16, 16], 4], [32, [8, 8], 4], [64, [8, 8], 2],
+                                     [512, [5, 5], 1]]
+                   },
         )
         .debugging(log_level="INFO")
         .framework(framework="torch")
         .resources(num_gpus=1)
         .multi_agent(
-            policies=env.possible_agents,
-            policy_mapping_fn=lambda agent_id, episode, worker, **kwargs: agent_id
+            policies={"shared_policy"},
+            policy_mapping_fn=lambda agent_id, episode, worker, **kwargs: "shared_policy"
         )
     )
 

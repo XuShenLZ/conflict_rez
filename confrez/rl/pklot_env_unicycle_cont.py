@@ -286,7 +286,7 @@ class parallel_env(ParallelEnv, EzPickle):
                     self.update_vehicle_polygon(agent)
                     if (self.has_collision(agent) or
                         np.linalg.norm([init_state[0] - self.goals[agent].x.x,
-                                        init_state[1] - self.goals[agent].x.y]) < 8):
+                                        init_state[1] - self.goals[agent].x.y]) < 16):
                         continue
                     else:
                         break
@@ -706,12 +706,12 @@ class parallel_env(ParallelEnv, EzPickle):
         observation = np.rot90(observation, k=3)
         observation = np.fliplr(observation)
         if self.resize is not None:
-            observation = cv2.resize(observation, dsize=self.resize)
+            observation = cv2.resize(observation, dsize=self.resize, interpolation=cv2.INTER_NEAREST)
 
         if self.return_scaled:
-            return (observation / 256).astype(np.float16)
+            return (observation / 256).astype(np.float16).copy()
         else:
-            return observation.astype(np.uint8)
+            return observation.astype(np.uint8).copy()
 
 
     def enable_render(self):
@@ -772,7 +772,7 @@ class parallel_env(ParallelEnv, EzPickle):
         self.frame = 0
         self.cycle_done = False
 
-        while len(self.valid_layouts) < 100:
+        while len(self.valid_layouts) < 10:
             self.init_walls()
             self.init_vehicles()
             layout = (self.walls, self.goals, self.states, self.agents)

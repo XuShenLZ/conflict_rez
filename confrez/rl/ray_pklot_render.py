@@ -17,16 +17,16 @@ from ray.rllib.algorithms.ppo import PPO, PPOConfig
 
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 
-checkpoint_path = os.path.expanduser("ray_results/pk_lot/PPO-2-randTrue-m_cycles500/PPO_pk_lot_a6248_00000_0_2024-08-18_13-15-44/checkpoint_009180")
+checkpoint_path = os.path.expanduser("ray_results/pk_lot/PPO-2-randTrue-m_cycles500/PPO_pk_lot_6a56d_00000_0_2024-09-03_03-51-03/checkpoint_001160")
 
 
 def get_env(render=False):
     """This function is needed to provide callables for DummyVectorEnv."""
     env_config = pklot_env_cont.EnvParams(
-        reward_stop=-10, reward_dist=10, reward_heading=0, reward_time=-1, reward_collision=-10, reward_goal=1000,
+        reward_stop=-1, reward_dist=10, reward_heading=0, reward_time=-1, reward_collision=-1, reward_goal=1000,
     )
     env = pklot_env_cont.parallel_env(n_vehicles=2, random_reset=True, render_mode="rgb_array", seed=0,
-                                      params=env_config, max_cycles=500, return_scaled=True, resize=(84, 84))
+                                      params=env_config, max_cycles=500, return_scaled=True, resize=(140, 140))
     return env
 
 
@@ -42,8 +42,15 @@ frame_list = []
 obs_list = []
 i = 0
 actions = {}
+env.reset()
 obs, _ = env.reset()
 # print(obs['vehicle_0'].shape)
+# img = Image.fromarray((obs['vehicle_0'] * 256).astype(np.uint8))
+# img.save('temp0.png')
+# img = Image.fromarray((obs['vehicle_1'] * 256).astype(np.uint8))
+# img.save('temp1.png')
+
+# exit(0)
 # print(env.render().shape)
 
 while True:
@@ -52,7 +59,7 @@ while True:
         # agent = list(obs.keys())[num]
         current_obs = obs[agent].copy()
         action = (PPO_agent.compute_single_action
-                           (current_obs, policy_id=agent))
+                           (current_obs, policy_id="shared_policy"))
         action = np.clip(action, env.action_space(agent).low, env.action_space(agent).high)
         actions[agent] = action
     obs, reward, termination, truncation, _ = env.step(actions)
